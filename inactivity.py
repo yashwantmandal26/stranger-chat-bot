@@ -1,0 +1,59 @@
+import asyncio
+import logging
+from aiogram import Bot
+
+import database
+
+logger = logging.getLogger(__name__)
+
+
+async def run_inactivity_checker(
+    bot: Bot,
+    check_interval_seconds: int = 30,
+    timeout_minutes: int = 10,
+) -> None:
+    """
+    Background worker that checks for and closes inactive chat sessions.
+    Runs periodically and notifies both partners when a chat expires.
+    """
+    logger.info(
+        "Starting inactivity cleaner: checking every %ss for sessions older than %sm.",
+        check_interval_seconds,
+        timeout_minutes,
+    )
+    while True:
+        try:
+            await asyncio.sleep(check_interval_seconds)
+            closed_sessions = await database.get_and_close_inactive_sessions(
+                timeout_minutes=timeout_minutes
+            )
+
+            for session in closed_sessions:
+                user1_id = session["user1_id"]
+                user2_id = session["user2_id"]
+                logger.info(
+                    "Closed inactive chat session id=%s between users %s and %s.",
+                    session.get("id"),
+                    user1_id,
+                    user2_id,
+                )
+
+                inactivity_notice = (
+                    "⏳ <b>Chat closed due to inactivity.</b>\n\n"
+                    "Use <b>/find</b> to chat again!"
+                )
+
+                for uid in (user1_id, user2_id):
+                    try:
+                        await bot.send_message(chat_id=uid, text=inactivity_notice)
+                    except Exception as e:
+                        logger.debug(
+                            "Could not deliver inactivity notice to user %s: %s",
+                            uid,
+                            e,
+                        )
+        except asyncio.CancelledError:
+            logger.info("Inactivity checker loop cancelled.")
+            break
+        except Exception as e:
+            logger.error("Unexpected error in inactivity checker: %s", e)
