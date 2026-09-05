@@ -75,6 +75,21 @@ def get_profile_keyboard() -> InlineKeyboardMarkup:
                 InlineKeyboardButton(text="👤 Change Gender", callback_data="cb_open_gender"),
                 InlineKeyboardButton(text="🎂 Change Age", callback_data="cb_open_age"),
             ],
+            [
+                InlineKeyboardButton(text="🔍 Find Next Stranger", callback_data="cb_start_find"),
+            ],
+        ]
+    )
+
+
+def get_partner_disconnected_keyboard() -> InlineKeyboardMarkup:
+    """Returns inline keyboard when partner disconnects: Find Next or Change Profile."""
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text="🔍 Find Next Stranger", callback_data="cb_start_find"),
+                InlineKeyboardButton(text="👤 Change Profile", callback_data="cb_open_profile"),
+            ]
         ]
     )
 

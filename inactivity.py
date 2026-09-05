@@ -3,6 +3,8 @@ import logging
 from aiogram import Bot
 
 import database
+from keyboards import get_partner_disconnected_keyboard
+from quotes import get_random_motivational_quote
 
 logger = logging.getLogger(__name__)
 
@@ -38,14 +40,23 @@ async def run_inactivity_checker(
                     user2_id,
                 )
 
+                quote = get_random_motivational_quote()
                 inactivity_notice = (
-                    "⏳ <b>Chat closed due to inactivity.</b>\n\n"
-                    "Use <b>/find</b> to chat again!"
+                    "⏳ <b>Chat closed due to inactivity.</b>\n"
+                    "━━━━━━━━━━━━━━━━━━━\n"
+                    "✨ <b>Thought of the Moment:</b>\n"
+                    f"<i>{quote}</i>\n"
+                    "━━━━━━━━━━━━━━━━━━━\n"
+                    "Where would you like to go next?"
                 )
 
                 for uid in (user1_id, user2_id):
                     try:
-                        await bot.send_message(chat_id=uid, text=inactivity_notice)
+                        await bot.send_message(
+                            chat_id=uid,
+                            text=inactivity_notice,
+                            reply_markup=get_partner_disconnected_keyboard(),
+                        )
                     except Exception as e:
                         logger.debug(
                             "Could not deliver inactivity notice to user %s: %s",

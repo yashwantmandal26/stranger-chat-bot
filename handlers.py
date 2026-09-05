@@ -22,6 +22,7 @@ from keyboards import (
     get_invite_keyboard,
     get_math_puzzle_keyboard,
     get_number_guess_keyboard,
+    get_partner_disconnected_keyboard,
     get_profile_keyboard,
     get_report_reasons_keyboard,
     get_rps_keyboard,
@@ -29,6 +30,7 @@ from keyboards import (
     get_welcome_keyboard,
 )
 from match_queue import match_queue
+from quotes import get_partner_ended_text, get_random_motivational_quote
 
 logger = logging.getLogger(__name__)
 
@@ -232,8 +234,8 @@ async def handle_end_and_restart(callback: CallbackQuery) -> None:
         try:
             await callback.bot.send_message(
                 chat_id=partner_id,
-                text="👋 <i>Your partner has disconnected.</i>\n\nTap <b>🔍 Find Stranger</b> to start a new chat!",
-                reply_markup=get_idle_reply_keyboard(),
+                text=get_partner_ended_text(),
+                reply_markup=get_partner_disconnected_keyboard(),
             )
         except Exception:
             pass
@@ -310,6 +312,32 @@ async def handle_stats_command(message: Message) -> None:
     await message.answer(stats_text)
 
 
+async def build_profile_card(from_user, db_user: dict[str, Any]) -> str:
+    """Builds the aesthetic profile card text."""
+    _, age_days, _ = account_age.check_account_age(from_user.id)
+    user_gender = format_gender_display(db_user.get("gender"))
+    user_age = format_age_display(db_user.get("age_range"))
+    is_premium = await database.is_premium_active(from_user.id)
+    plan_badge = "⭐ VIP Member (Priority Queue)" if is_premium else "Standard Member (Free)"
+    chats_count = db_user.get("chat_count", 0)
+    strikes = db_user.get("strikes", 0)
+    reputation = "⭐️⭐️⭐️⭐️⭐️ Excellent" if strikes == 0 else f"⚠️ Caution ({strikes} strikes)"
+
+    return (
+        "👤 <b>Your Stranger Chat Profile</b>\n"
+        "━━━━━━━━━━━━━━━━━━━\n"
+        f"🆔 <b>Anonymous ID:</b> <code>#SC-{str(from_user.id)[-6:]}</code>\n"
+        f"⚧️ <b>Gender:</b> {user_gender}\n"
+        f"🎂 <b>Age Range:</b> {user_age}\n"
+        f"⭐ <b>Membership:</b> {plan_badge}\n"
+        f"⏳ <b>Account Age:</b> ~{age_days} days (Verified ✅)\n"
+        f"💬 <b>Chats Completed:</b> {chats_count}\n"
+        f"🛡️ <b>Reputation:</b> {reputation}\n"
+        "━━━━━━━━━━━━━━━━━━━\n"
+        "<i>Update your preferences anytime using buttons below:</i>"
+    )
+
+
 @router.message(Command("profile"))
 @router.message(Command("me"))
 @router.message(F.text == "👤 Profile")
@@ -324,29 +352,27 @@ async def handle_profile_command(message: Message) -> None:
         await message.answer("⛔ Your account is suspended.")
         return
 
-    _, age_days, _ = account_age.check_account_age(from_user.id)
-    user_gender = format_gender_display(db_user.get("gender"))
-    user_age = format_age_display(db_user.get("age_range"))
-    is_premium = await database.is_premium_active(from_user.id)
-    plan_badge = "⭐ VIP Member (Priority Queue)" if is_premium else "Standard Member (Free)"
-    chats_count = db_user.get("chat_count", 0)
-    strikes = db_user.get("strikes", 0)
-    reputation = "⭐️⭐️⭐️⭐️⭐️ Excellent" if strikes == 0 else f"⚠️ Caution ({strikes} strikes)"
-
-    profile_card = (
-        "👤 <b>Your Stranger Chat Profile</b>\n"
-        "━━━━━━━━━━━━━━━━━━━\n"
-        f"🆔 <b>Anonymous ID:</b> <code>#SC-{str(from_user.id)[-6:]}</code>\n"
-        f"⚧️ <b>Gender:</b> {user_gender}\n"
-        f"🎂 <b>Age Range:</b> {user_age}\n"
-        f"⭐ <b>Membership:</b> {plan_badge}\n"
-        f"⏳ <b>Account Age:</b> ~{age_days} days (Verified ✅)\n"
-        f"💬 <b>Chats Completed:</b> {chats_count}\n"
-        f"🛡️ <b>Reputation:</b> {reputation}\n"
-        "━━━━━━━━━━━━━━━━━━━\n"
-        "<i>Update your preferences anytime using buttons below:</i>"
-    )
+    profile_card = await build_profile_card(from_user, db_user)
     await message.answer(profile_card, reply_markup=get_profile_keyboard())
+
+
+@router.callback_query(F.data == "cb_open_profile")
+async def handle_open_profile_callback(callback: CallbackQuery) -> None:
+    """Displays the user's sleek anonymous profile card from inline buttons."""
+    await callback.answer()
+    if not callback.from_user or not callback.message:
+        return
+
+    db_user, is_banned = await get_or_register_user(callback.from_user)
+    if is_banned:
+        await callback.message.answer("⛔ Your account is suspended.")
+        return
+
+    profile_card = await build_profile_card(callback.from_user, db_user)
+    try:
+        await callback.message.edit_text(profile_card, reply_markup=get_profile_keyboard())
+    except Exception:
+        await callback.message.answer(profile_card, reply_markup=get_profile_keyboard())
 
 
 @router.message(Command("icebreaker"))
@@ -1403,10 +1429,8 @@ async def handle_next_command(message: Message) -> None:
     closed_session = await database.close_session_for_user(tg_id)
 
     if not closed_session:
-        await message.answer(
-            "You are not in an active chat.\nTap <b>🔍 Find Stranger</b> to connect!",
-            reply_markup=get_idle_reply_keyboard(),
-        )
+        # User not in active chat (e.g. partner already ended chat or user was idle); seamlessly find next!
+        await execute_find_flow(message, from_user)
         return
 
     partner_id = (
@@ -1418,10 +1442,8 @@ async def handle_next_command(message: Message) -> None:
     try:
         await message.bot.send_message(
             chat_id=partner_id,
-            text="👋 <b>Stranger has disconnected.</b>\n"
-                 "━━━━━━━━━━━━━━━━━━━\n"
-                 "Tap <b>🔍 Find Stranger</b> below to connect with someone new!",
-            reply_markup=get_idle_reply_keyboard(),
+            text=get_partner_ended_text(),
+            reply_markup=get_partner_disconnected_keyboard(),
         )
     except Exception as e:
         logger.warning("Failed to notify disconnected partner %s: %s", partner_id, e)
@@ -1486,8 +1508,8 @@ async def handle_next_command(message: Message) -> None:
 async def handle_stop_command(message: Message) -> None:
     """
     Handles /stop command:
-    - If in active chat: ends session, notifies partner: '👋 Stranger has disconnected.'
-      Replies to user: 'Chat ended. Tap Find Stranger to start again.'
+    - If in active chat: ends session, notifies partner with motivational quote & options.
+      Replies to user with motivational quote & options.
     - If in queue: removes user from queue.
     - If neither: replies: 'You are not in an active chat.'
     """
@@ -1508,10 +1530,8 @@ async def handle_stop_command(message: Message) -> None:
         try:
             await message.bot.send_message(
                 chat_id=partner_id,
-                text="👋 <b>Stranger has disconnected.</b>\n"
-                     "━━━━━━━━━━━━━━━━━━━\n"
-                     "Tap <b>🔍 Find Stranger</b> to connect with someone new!",
-                reply_markup=get_idle_reply_keyboard(),
+                text=get_partner_ended_text(),
+                reply_markup=get_partner_disconnected_keyboard(),
             )
         except Exception as e:
             logger.warning("Failed to notify partner %s on /stop: %s", partner_id, e)
@@ -1520,8 +1540,11 @@ async def handle_stop_command(message: Message) -> None:
         await message.answer(
             "⏹️ <b>Chat ended.</b>\n"
             "━━━━━━━━━━━━━━━━━━━\n"
-            "Tap <b>🔍 Find Stranger</b> below to start chatting again!",
-            reply_markup=get_idle_reply_keyboard(),
+            "✨ <b>Thought of the Moment:</b>\n"
+            f"<i>{get_random_motivational_quote()}</i>\n"
+            "━━━━━━━━━━━━━━━━━━━\n"
+            "Where would you like to go next?",
+            reply_markup=get_partner_disconnected_keyboard(),
         )
         return
 
@@ -1714,9 +1737,8 @@ async def handle_anonymous_message(message: Message) -> None:
         await database.close_session_for_user(tg_id)
         await message.answer(
             "⚠️ <b>Message could not be delivered.</b>\n\n"
-            "Your chat partner has disconnected or left.\n"
-            "Tap <b>🔍 Find Stranger</b> to start a new chat!",
-            reply_markup=get_idle_reply_keyboard(),
+            + get_partner_ended_text(),
+            reply_markup=get_partner_disconnected_keyboard(),
         )
     except Exception as e:
         logger.error("Unexpected error relaying message: %s", e)
