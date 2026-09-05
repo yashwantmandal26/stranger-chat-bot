@@ -9,6 +9,7 @@ A high-performance, asynchronous Telegram bot built with **Python 3.10+**, **aio
 - **🛡️ Safety First Account Verification**: Automatically estimates Telegram account age on `/start`. Accounts younger than 30 days are blocked to prevent spam and bot farms.
 - **📱 Persistent Mobile Keyboards**: 1-tap quick action buttons at the bottom of the screen (idle & active chat modes) so users never have to type slash commands.
 - **🎲 Icebreaker Engine**: 30+ curated, engaging conversation starter prompts (`/icebreaker` or `🎲 Send Icebreaker`) to keep discussions lively and interesting.
+- **🎮 Interactive Mini-Games Suite**: Play Guess the Number (0–9), Math Speed Puzzles ($+, -, \times, \div$), Rock-Paper-Scissors, and Lucky Dice Roll both **Solo** and in **Live Partner Duels** during chat!
 - **👤 Anonymous Profile Card**: Clean badge displaying anonymous ID (`#SC-xxxxxx`), gender, membership tier, verified account age, chat count, and reputation (`/profile`).
 - **🚨 Community Moderation**: Instant report button (`/report` or `🚨 Report User`) that records strikes and automatically bans repeat offenders at 3 strikes.
 - **👫 Opposite-Gender Matchmaking**: Pairs users based on gender preference (`male` <-> `female`) via a lock-protected priority virtual queue.
@@ -41,6 +42,7 @@ A high-performance, asynchronous Telegram bot built with **Python 3.10+**, **aio
 ├── account_age.py             # User ID milestone interpolation & age estimator
 ├── config.py                  # App configuration loader
 ├── database.py                # Async SQLite operations and schema setup
+├── games.py                   # Mini-games engine (Math, Guess 0-9, RPS, Dice)
 ├── handlers.py                # Bot command & message handlers with persistent keyboards
 ├── icebreakers.py             # Curated conversation starter prompt engine
 ├── inactivity.py              # 10-minute inactivity cleaner background task
@@ -122,6 +124,7 @@ Render's Web Services are **100% free** and act as an HTTP web server:
 | `/find` | `🔍 Find Stranger` | Search for a partner (opposite gender preferred, fallback to any) |
 | `/next` | `⏭️ Next Stranger` | Skip current stranger and find a new partner |
 | `/stop` | `⏹️ End Chat` | End active chat or cancel queue search |
+| `/games` | `🎮 Mini Games` / `🎮 Play Game` | Play interactive games (Solo & Partner Duels) |
 | `/icebreaker` | `🎲 Send Icebreaker` | Post a fun conversation starter into chat |
 | `/profile` | `👤 Profile` | View your anonymous profile card & stats |
 | `/gender` | Inline Button | View or change gender (Male, Female, Prefer not to say) |

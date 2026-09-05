@@ -245,6 +245,7 @@ async def setup_bot_seo_metadata(bot: Bot) -> None:
         BotCommand(command="next", description="⏭️ Skip current stranger & find new"),
         BotCommand(command="stop", description="⏹️ End chat or cancel search"),
         BotCommand(command="icebreaker", description="🎲 Get a fun conversation starter"),
+        BotCommand(command="games", description="🎮 Play mini-games (Solo & Partner duels)"),
         BotCommand(command="profile", description="👤 View your anonymous profile card"),
         BotCommand(command="gender", description="👤 Change your gender preference"),
         BotCommand(command="age", description="🎂 Set or change your age range"),

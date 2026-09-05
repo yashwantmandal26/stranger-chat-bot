@@ -12,8 +12,9 @@ def get_idle_reply_keyboard() -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(
         keyboard=[
             [KeyboardButton(text="🔍 Find Stranger")],
-            [KeyboardButton(text="🎲 Icebreakers"), KeyboardButton(text="👤 Profile")],
-            [KeyboardButton(text="🚀 Invite Friends"), KeyboardButton(text="❓ Help")],
+            [KeyboardButton(text="🎮 Mini Games"), KeyboardButton(text="🎲 Icebreakers")],
+            [KeyboardButton(text="👤 Profile"), KeyboardButton(text="🚀 Invite Friends")],
+            [KeyboardButton(text="❓ Help")],
         ],
         resize_keyboard=True,
         is_persistent=True,
@@ -25,7 +26,8 @@ def get_chat_reply_keyboard() -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(
         keyboard=[
             [KeyboardButton(text="⏭️ Next Stranger"), KeyboardButton(text="⏹️ End Chat")],
-            [KeyboardButton(text="🎲 Send Icebreaker"), KeyboardButton(text="🚨 Report User")],
+            [KeyboardButton(text="🎲 Send Icebreaker"), KeyboardButton(text="🎮 Play Game")],
+            [KeyboardButton(text="🚨 Report User")],
         ],
         resize_keyboard=True,
         is_persistent=True,
@@ -120,5 +122,72 @@ def get_invite_keyboard(bot_username: str = "StrangersChattingBot") -> InlineKey
             [
                 InlineKeyboardButton(text="🚀 Share with Friends", url=telegram_share_link),
             ]
+        ]
+    )
+
+
+def get_games_menu_keyboard(is_in_chat: bool = False) -> InlineKeyboardMarkup:
+    """Returns inline keyboard for selecting games based on whether user is in active chat."""
+    if is_in_chat:
+        return InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    InlineKeyboardButton(text="⚡ Math Speed Duel", callback_data="cb_game:duel_math"),
+                    InlineKeyboardButton(text="✊ RPS Duel", callback_data="cb_game:duel_rps"),
+                ],
+                [
+                    InlineKeyboardButton(text="🔢 Number Guess Race", callback_data="cb_game:duel_guess"),
+                    InlineKeyboardButton(text="🎲 Dice Roll Duel", callback_data="cb_game:duel_dice"),
+                ],
+                [
+                    InlineKeyboardButton(text="🕹️ Solo Games Menu", callback_data="cb_game:solo_menu"),
+                ],
+            ]
+        )
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text="🔢 Guess Number (0–9)", callback_data="cb_game:solo_guess"),
+                InlineKeyboardButton(text="🧮 Math Puzzle", callback_data="cb_game:solo_math"),
+            ],
+            [
+                InlineKeyboardButton(text="✊ Rock-Paper-Scissors", callback_data="cb_game:solo_rps"),
+                InlineKeyboardButton(text="🎲 Lucky Dice Roll", callback_data="cb_game:solo_dice"),
+            ],
+        ]
+    )
+
+
+def get_number_guess_keyboard(prefix: str = "cb_solo_guess") -> InlineKeyboardMarkup:
+    """Returns 0-9 number keypad for guessing games."""
+    row1 = [InlineKeyboardButton(text=str(i), callback_data=f"{prefix}:{i}") for i in range(0, 5)]
+    row2 = [InlineKeyboardButton(text=str(i), callback_data=f"{prefix}:{i}") for i in range(5, 10)]
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            row1,
+            row2,
+            [InlineKeyboardButton(text="🎮 Games Menu", callback_data="cb_game:menu")],
+        ]
+    )
+
+
+def get_math_puzzle_keyboard(options: list[int], prefix: str = "cb_solo_math") -> InlineKeyboardMarkup:
+    """Returns 4 multiple-choice buttons in a 2x2 grid for math problems."""
+    buttons = [InlineKeyboardButton(text=str(opt), callback_data=f"{prefix}:{opt}") for opt in options]
+    rows = [buttons[:2], buttons[2:]]
+    rows.append([InlineKeyboardButton(text="🎮 Games Menu", callback_data="cb_game:menu")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def get_rps_keyboard(prefix: str = "cb_solo_rps") -> InlineKeyboardMarkup:
+    """Returns Rock, Paper, Scissors buttons."""
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text="🪨 Rock", callback_data=f"{prefix}:rock"),
+                InlineKeyboardButton(text="📄 Paper", callback_data=f"{prefix}:paper"),
+                InlineKeyboardButton(text="✂️ Scissors", callback_data=f"{prefix}:scissors"),
+            ],
+            [InlineKeyboardButton(text="🎮 Games Menu", callback_data="cb_game:menu")],
         ]
     )
