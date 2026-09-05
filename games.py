@@ -177,8 +177,39 @@ class SoloGamesManager:
 
 
 # ---------------------------------------------------------
-# Partner Duels Manager
 # ---------------------------------------------------------
+# Partner Duels Manager & Session Scoreboard
+# ---------------------------------------------------------
+class SessionScoreboard:
+    """Tracks head-to-head game duel scores between connected strangers in a chat session."""
+
+    def __init__(self) -> None:
+        # session_id -> {user1_id: wins, user2_id: wins, "ties": count, "games": count}
+        self._scores: dict[int, dict[Any, int]] = {}
+
+    def record_result(
+        self, session_id: int, winner_id: Optional[int], user1_id: int, user2_id: int
+    ) -> tuple[int, int, int]:
+        if session_id not in self._scores:
+            self._scores[session_id] = {user1_id: 0, user2_id: 0, "ties": 0, "games": 0}
+        sc = self._scores[session_id]
+        sc["games"] = sc.get("games", 0) + 1
+        if winner_id == user1_id:
+            sc[user1_id] = sc.get(user1_id, 0) + 1
+        elif winner_id == user2_id:
+            sc[user2_id] = sc.get(user2_id, 0) + 1
+        else:
+            sc["ties"] = sc.get("ties", 0) + 1
+        return sc.get(user1_id, 0), sc.get(user2_id, 0), sc.get("ties", 0)
+
+    def get_score(self, session_id: int, my_id: int, partner_id: int) -> tuple[int, int, int]:
+        sc = self._scores.get(session_id, {})
+        return sc.get(my_id, 0), sc.get(partner_id, 0), sc.get("ties", 0)
+
+    def reset_session(self, session_id: int) -> None:
+        self._scores.pop(session_id, None)
+
+
 @dataclass
 class MathDuel:
     session_id: int
@@ -187,6 +218,9 @@ class MathDuel:
     puzzle: MathPuzzle
     winner_id: Optional[int] = None
     answered: bool = False
+    started_at: float = field(default_factory=time.time)
+    attempts: dict[int, int] = field(default_factory=dict)
+    last_wrong_guess: dict[int, int] = field(default_factory=dict)
 
 
 @dataclass
@@ -195,6 +229,7 @@ class RPSDuel:
     user1_id: int
     user2_id: int
     moves: dict[int, str] = field(default_factory=dict)
+    started_at: float = field(default_factory=time.time)
     finished: bool = False
 
 
@@ -206,6 +241,20 @@ class GuessDuel:
     target: int
     winner_id: Optional[int] = None
     finished: bool = False
+    started_at: float = field(default_factory=time.time)
+    attempts: dict[int, int] = field(default_factory=dict)
+    history: dict[int, list[tuple[int, str]]] = field(default_factory=dict)
+
+
+@dataclass
+class DiceDuel:
+    session_id: int
+    user1_id: int
+    user2_id: int
+    starter_id: int
+    rolls: dict[int, int] = field(default_factory=dict)
+    finished: bool = False
+    started_at: float = field(default_factory=time.time)
 
 
 class DuelGamesManager:
@@ -215,10 +264,25 @@ class DuelGamesManager:
         self._math_duels: dict[int, MathDuel] = {}
         self._rps_duels: dict[int, RPSDuel] = {}
         self._guess_duels: dict[int, GuessDuel] = {}
+        self._dice_duels: dict[int, DiceDuel] = {}
+        self._scoreboard = SessionScoreboard()
         self._lock = asyncio.Lock()
 
+    def get_session_score(
+        self, session_id: int, my_id: int, partner_id: int
+    ) -> tuple[int, int, int]:
+        return self._scoreboard.get_score(session_id, my_id, partner_id)
+
+    def reset_session(self, session_id: int) -> None:
+        self._scoreboard.reset_session(session_id)
+        self._math_duels.pop(session_id, None)
+        self._rps_duels.pop(session_id, None)
+        self._guess_duels.pop(session_id, None)
+        self._dice_duels.pop(session_id, None)
+
+    # --- Math Duel ---
     async def start_math_duel(self, session_id: int, user1_id: int, user2_id: int) -> MathPuzzle:
-        """Starts a live math duel between two chatting users."""
+        """Starts a live math duel between two connected strangers."""
         puzzle = generate_math_puzzle()
         async with self._lock:
             self._math_duels[session_id] = MathDuel(
@@ -226,35 +290,45 @@ class DuelGamesManager:
                 user1_id=user1_id,
                 user2_id=user2_id,
                 puzzle=puzzle,
+                attempts={user1_id: 0, user2_id: 0},
             )
         return puzzle
 
     async def submit_math_answer(
         self, session_id: int, user_id: int, answer: int
-    ) -> tuple[str, Optional[int], int]:
+    ) -> tuple[str, Optional[int], int, int, float, tuple[int, int, int]]:
         """
         Evaluates a math duel answer.
         Returns:
-          - 'winner': user was the first to submit the correct answer!
-          - 'wrong': user guessed wrong.
-          - 'already_finished': someone else already won.
-          - 'no_game': game not found.
+          (status, winner_id, correct_ans, user_attempts, elapsed_secs, (my_score, partner_score, ties))
+          status: 'winner' | 'wrong' | 'already_finished' | 'no_game'
         """
         async with self._lock:
             duel = self._math_duels.get(session_id)
             if not duel:
-                return "no_game", None, answer
+                return "no_game", None, answer, 0, 0.0, (0, 0, 0)
 
+            p_id = duel.user2_id if duel.user1_id == user_id else duel.user1_id
             if duel.answered:
-                return "already_finished", duel.winner_id, duel.puzzle.answer
+                scores = self._scoreboard.get_score(session_id, user_id, p_id)
+                return "already_finished", duel.winner_id, duel.puzzle.answer, duel.attempts.get(user_id, 0), 0.0, scores
+
+            duel.attempts[user_id] = duel.attempts.get(user_id, 0) + 1
+            user_att = duel.attempts[user_id]
 
             if answer == duel.puzzle.answer:
                 duel.answered = True
                 duel.winner_id = user_id
-                return "winner", user_id, duel.puzzle.answer
+                elapsed = max(0.5, round(time.time() - duel.started_at, 1))
+                self._scoreboard.record_result(session_id, user_id, duel.user1_id, duel.user2_id)
+                scores = self._scoreboard.get_score(session_id, user_id, p_id)
+                return "winner", user_id, duel.puzzle.answer, user_att, elapsed, scores
             else:
-                return "wrong", None, duel.puzzle.answer
+                duel.last_wrong_guess[user_id] = answer
+                scores = self._scoreboard.get_score(session_id, user_id, p_id)
+                return "wrong", None, duel.puzzle.answer, user_att, 0.0, scores
 
+    # --- RPS Duel ---
     async def start_rps_duel(self, session_id: int, user1_id: int, user2_id: int) -> None:
         """Starts a hidden-move RPS duel."""
         async with self._lock:
@@ -268,20 +342,20 @@ class DuelGamesManager:
 
     async def submit_rps_move(
         self, session_id: int, user_id: int, move: str
-    ) -> tuple[bool, Optional[dict[int, str]], Optional[int]]:
+    ) -> tuple[bool, dict[int, str], Optional[int], tuple[int, int, int]]:
         """
         Submits an RPS move.
         Returns:
-          (is_finished, moves_dict, winner_id_or_none)
+          (is_finished, moves_dict, winner_id, (my_score, partner_score, ties))
         """
         async with self._lock:
             duel = self._rps_duels.get(session_id)
             if not duel:
-                return False, None, None
+                return False, {}, None, (0, 0, 0)
 
+            p_id = duel.user2_id if duel.user1_id == user_id else duel.user1_id
             duel.moves[user_id] = move.lower()
 
-            # If both have answered
             if len(duel.moves) >= 2:
                 duel.finished = True
                 u1 = duel.user1_id
@@ -296,12 +370,16 @@ class DuelGamesManager:
                 elif result == "lose":
                     winner_id = u2
                 else:
-                    winner_id = None  # tie
+                    winner_id = None
 
-                return True, dict(duel.moves), winner_id
+                self._scoreboard.record_result(session_id, winner_id, u1, u2)
+                scores = self._scoreboard.get_score(session_id, user_id, p_id)
+                return True, dict(duel.moves), winner_id, scores
 
-            return False, dict(duel.moves), None
+            scores = self._scoreboard.get_score(session_id, user_id, p_id)
+            return False, dict(duel.moves), None, scores
 
+    # --- Number Guess Duel ---
     async def start_guess_duel(self, session_id: int, user1_id: int, user2_id: int) -> int:
         """Starts a number guess race between both users."""
         target = random.randint(0, 9)
@@ -311,33 +389,120 @@ class DuelGamesManager:
                 user1_id=user1_id,
                 user2_id=user2_id,
                 target=target,
+                attempts={user1_id: 0, user2_id: 0},
+                history={user1_id: [], user2_id: []},
             )
         return target
 
     async def submit_guess_duel(
         self, session_id: int, user_id: int, guess: int
-    ) -> tuple[str, int, Optional[int]]:
+    ) -> tuple[str, int, Optional[int], int, int, float, tuple[int, int, int]]:
         """
-        Checks a guess in duel mode.
-        Returns: ('correct', target, winner_id), ('higher', target, None), ('lower', target, None), ('already_finished', target, winner_id)
+        Evaluates a guess in duel mode.
+        Returns:
+          (status, target, winner_id, my_attempts, partner_attempts, elapsed_secs, (my_score, partner_score, ties))
+          status: 'correct' | 'higher' | 'lower' | 'already_finished' | 'no_game'
         """
         async with self._lock:
             duel = self._guess_duels.get(session_id)
             if not duel:
-                return "no_game", 0, None
+                return "no_game", 0, None, 0, 0, 0.0, (0, 0, 0)
 
+            p_id = duel.user2_id if duel.user1_id == user_id else duel.user1_id
             if duel.finished:
-                return "already_finished", duel.target, duel.winner_id
+                scores = self._scoreboard.get_score(session_id, user_id, p_id)
+                return (
+                    "already_finished",
+                    duel.target,
+                    duel.winner_id,
+                    duel.attempts.get(user_id, 0),
+                    duel.attempts.get(p_id, 0),
+                    0.0,
+                    scores,
+                )
 
+            duel.attempts[user_id] = duel.attempts.get(user_id, 0) + 1
+            my_att = duel.attempts[user_id]
+            p_att = duel.attempts.get(p_id, 0)
             target = duel.target
+
             if guess == target:
                 duel.finished = True
                 duel.winner_id = user_id
-                return "correct", target, user_id
+                elapsed = max(1.0, round(time.time() - duel.started_at, 1))
+                self._scoreboard.record_result(session_id, user_id, duel.user1_id, duel.user2_id)
+                scores = self._scoreboard.get_score(session_id, user_id, p_id)
+                return "correct", target, user_id, my_att, p_att, elapsed, scores
             elif guess < target:
-                return "higher", target, None
+                duel.history.setdefault(user_id, []).append((guess, "higher"))
+                scores = self._scoreboard.get_score(session_id, user_id, p_id)
+                return "higher", target, None, my_att, p_att, 0.0, scores
             else:
-                return "lower", target, None
+                duel.history.setdefault(user_id, []).append((guess, "lower"))
+                scores = self._scoreboard.get_score(session_id, user_id, p_id)
+                return "lower", target, None, my_att, p_att, 0.0, scores
+
+    # --- Interactive Turn Dice Duel ---
+    async def start_dice_duel(
+        self, session_id: int, user1_id: int, user2_id: int, starter_id: int
+    ) -> int:
+        """Starter rolls their dice to challenge partner."""
+        starter_roll = random.randint(1, 6)
+        async with self._lock:
+            self._dice_duels[session_id] = DiceDuel(
+                session_id=session_id,
+                user1_id=user1_id,
+                user2_id=user2_id,
+                starter_id=starter_id,
+                rolls={starter_id: starter_roll},
+                finished=False,
+            )
+        return starter_roll
+
+    async def submit_dice_roll(
+        self, session_id: int, challenger_id: int
+    ) -> tuple[str, int, int, Optional[int], tuple[int, int, int]]:
+        """
+        Challenger rolls dice to answer challenge.
+        Returns:
+          (status, starter_roll, challenger_roll, winner_id, (challenger_score, starter_score, ties))
+          status: 'finished' | 'already_finished' | 'same_player' | 'no_game'
+        """
+        async with self._lock:
+            duel = self._dice_duels.get(session_id)
+            if not duel:
+                return "no_game", 0, 0, None, (0, 0, 0)
+
+            starter_id = duel.starter_id
+            if challenger_id == starter_id:
+                return "same_player", duel.rolls.get(starter_id, 0), 0, None, (0, 0, 0)
+
+            if duel.finished:
+                scores = self._scoreboard.get_score(session_id, challenger_id, starter_id)
+                return (
+                    "already_finished",
+                    duel.rolls.get(starter_id, 0),
+                    duel.rolls.get(challenger_id, 0),
+                    duel.rolls.get("winner_id"),
+                    scores,
+                )
+
+            challenger_roll = random.randint(1, 6)
+            starter_roll = duel.rolls.get(starter_id, random.randint(1, 6))
+            duel.rolls[challenger_id] = challenger_roll
+            duel.finished = True
+
+            if challenger_roll > starter_roll:
+                winner_id = challenger_id
+            elif starter_roll > challenger_roll:
+                winner_id = starter_id
+            else:
+                winner_id = None
+
+            duel.rolls["winner_id"] = winner_id
+            self._scoreboard.record_result(session_id, winner_id, duel.user1_id, duel.user2_id)
+            scores = self._scoreboard.get_score(session_id, challenger_id, starter_id)
+            return "finished", starter_roll, challenger_roll, winner_id, scores
 
 
 # Global singletons

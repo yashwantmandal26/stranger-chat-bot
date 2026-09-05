@@ -3,6 +3,7 @@ import logging
 from aiogram import Bot
 
 import database
+from games import duel_games
 from keyboards import get_partner_disconnected_keyboard
 from quotes import get_random_motivational_quote
 
@@ -31,6 +32,7 @@ async def run_inactivity_checker(
             )
 
             for session in closed_sessions:
+                duel_games.reset_session(session["id"])
                 user1_id = session["user1_id"]
                 user2_id = session["user2_id"]
                 logger.info(

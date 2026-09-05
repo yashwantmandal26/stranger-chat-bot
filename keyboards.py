@@ -236,3 +236,34 @@ def get_rps_keyboard(prefix: str = "cb_solo_rps") -> InlineKeyboardMarkup:
             [InlineKeyboardButton(text="🎮 Games Menu", callback_data="cb_game:menu")],
         ]
     )
+
+
+def get_dice_challenge_keyboard() -> InlineKeyboardMarkup:
+    """Returns button for challenging partner to roll their dice."""
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text="🎲 Roll Challenge Dice!", callback_data="cb_game:duel_dice_roll"),
+            ],
+            [
+                InlineKeyboardButton(text="🎮 Games Menu", callback_data="cb_game:menu"),
+            ],
+        ]
+    )
+
+
+def get_duel_rematch_keyboard(game_key: str) -> InlineKeyboardMarkup:
+    """Returns rematch and menu buttons for completed partner duels."""
+    labels = {
+        "math": ("⚡ New Math Duel", "cb_game:duel_math"),
+        "rps": ("✊ Play RPS Again", "cb_game:duel_rps"),
+        "guess": ("🔢 New Number Race", "cb_game:duel_guess"),
+        "dice": ("🎲 Roll Dice Again", "cb_game:duel_dice"),
+    }
+    btn_text, cb = labels.get(game_key, ("🔄 Play Again", "cb_game:menu"))
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text=btn_text, callback_data=cb)],
+            [InlineKeyboardButton(text="🎮 Games Menu", callback_data="cb_game:menu")],
+        ]
+    )

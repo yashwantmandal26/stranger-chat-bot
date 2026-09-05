@@ -16,6 +16,8 @@ from games import RPS_EMOJIS, duel_games, solo_games
 from keyboards import (
     get_age_keyboard,
     get_chat_reply_keyboard,
+    get_dice_challenge_keyboard,
+    get_duel_rematch_keyboard,
     get_games_menu_keyboard,
     get_gender_keyboard,
     get_idle_reply_keyboard,
@@ -230,6 +232,7 @@ async def handle_end_and_restart(callback: CallbackQuery) -> None:
     tg_id = callback.from_user.id
     session = await database.close_session_for_user(tg_id)
     if session:
+        duel_games.reset_session(session["id"])
         partner_id = session["user2_id"] if session["user1_id"] == tg_id else session["user1_id"]
         try:
             await callback.bot.send_message(
@@ -787,13 +790,26 @@ async def handle_duel_math_start(callback: CallbackQuery) -> None:
 
     partner_id = session["user2_id"] if session["user1_id"] == tg_id else session["user1_id"]
     puzzle = await duel_games.start_math_duel(session["id"], tg_id, partner_id)
+    my_sc, p_sc, ties = duel_games.get_session_score(session["id"], tg_id, partner_id)
     await callback.answer("⚡ Math duel started!")
 
     duel_text = (
         "⚡ <b>MATH SPEED DUEL!</b>\n"
         "━━━━━━━━━━━━━━━━━━━\n"
-        f"First player to solve wins:\n\n"
+        "Solve as fast as you can:\n\n"
         f"👉 <b>{puzzle.question}</b>\n"
+        "━━━━━━━━━━━━━━━━━━━\n"
+        f"🏆 <b>Session Score:</b> You <b>{my_sc}</b> ⚔️ <b>{p_sc}</b> Partner\n"
+        "━━━━━━━━━━━━━━━━━━━\n"
+        "Tap the correct answer:"
+    )
+    partner_text = (
+        "⚡ <b>MATH SPEED DUEL!</b>\n"
+        "━━━━━━━━━━━━━━━━━━━\n"
+        "Solve as fast as you can:\n\n"
+        f"👉 <b>{puzzle.question}</b>\n"
+        "━━━━━━━━━━━━━━━━━━━\n"
+        f"🏆 <b>Session Score:</b> You <b>{p_sc}</b> ⚔️ <b>{my_sc}</b> Partner\n"
         "━━━━━━━━━━━━━━━━━━━\n"
         "Tap the correct answer:"
     )
@@ -805,7 +821,7 @@ async def handle_duel_math_start(callback: CallbackQuery) -> None:
         await callback.message.answer(duel_text, reply_markup=duel_kb)
 
     try:
-        await callback.bot.send_message(chat_id=partner_id, text=duel_text, reply_markup=duel_kb)
+        await callback.bot.send_message(chat_id=partner_id, text=partner_text, reply_markup=duel_kb)
     except Exception as e:
         logger.warning("Failed to send math duel to partner %s: %s", partner_id, e)
 
@@ -825,33 +841,41 @@ async def handle_duel_math_answer(callback: CallbackQuery) -> None:
         return
 
     partner_id = session["user2_id"] if session["user1_id"] == tg_id else session["user1_id"]
-    status, winner_id, correct_ans = await duel_games.submit_math_answer(
+    status, winner_id, correct_ans, user_att, elapsed, (my_sc, p_sc, ties) = await duel_games.submit_math_answer(
         session["id"], tg_id, chosen_ans
     )
 
     if status == "winner":
         await callback.answer("🏆 You answered first and won!", show_alert=True)
-        duel_math_kb = InlineKeyboardMarkup(
-            inline_keyboard=[
-                [InlineKeyboardButton(text="⚡ Play Math Again", callback_data="cb_game:duel_math")],
-                [InlineKeyboardButton(text="🎮 Games Menu", callback_data="cb_game:menu")],
-            ]
-        )
-        win_card = (
-            "🏆 <b>MATH DUEL COMPLETE!</b>\n"
-            "━━━━━━━━━━━━━━━━━━━\n"
-            f"✅ Correct Answer: <b>{correct_ans}</b>\n"
-            "⚡ <b>Winner:</b> Your partner was quick and solved it first! 🥇\n"
-            "━━━━━━━━━━━━━━━━━━━\n"
-            "<i>Tap below to play again or open menu:</i>"
-        )
+        duel_math_kb = get_duel_rematch_keyboard("math")
+
         my_win_card = (
             "🏆 <b>MATH DUEL COMPLETE!</b>\n"
             "━━━━━━━━━━━━━━━━━━━\n"
-            f"✅ Correct Answer: <b>{correct_ans}</b>\n"
-            "⚡ <b>Winner:</b> YOU solved it first! 🥇 Great speed!\n"
+            f"✅ <b>Correct Answer:</b> <b>{correct_ans}</b>\n"
+            "⚡ <b>Winner:</b> YOU solved it first! 🥇\n"
             "━━━━━━━━━━━━━━━━━━━\n"
-            "<i>Tap below to play again or open menu:</i>"
+            "📊 <b>Speed & Stats:</b>\n"
+            f"• ⏱️ Reaction Time: <b>{elapsed}s</b>\n"
+            f"• 🎯 Your Attempts: <b>{user_att}</b>\n"
+            "━━━━━━━━━━━━━━━━━━━\n"
+            f"🏆 <b>Session Score:</b> You <b>{my_sc}</b> ⚔️ <b>{p_sc}</b> Partner (Ties: {ties})\n"
+            "━━━━━━━━━━━━━━━━━━━\n"
+            "<i>Tap below to play again or choose another game:</i>"
+        )
+        partner_win_card = (
+            "🏆 <b>MATH DUEL COMPLETE!</b>\n"
+            "━━━━━━━━━━━━━━━━━━━\n"
+            f"✅ <b>Correct Answer:</b> <b>{correct_ans}</b>\n"
+            "⚡ <b>Winner:</b> Your partner solved it first! 🥇\n"
+            "━━━━━━━━━━━━━━━━━━━\n"
+            "📊 <b>Speed & Stats:</b>\n"
+            f"• ⏱️ Winner Time: <b>{elapsed}s</b>\n"
+            f"• 🎯 Winner Attempts: <b>{user_att}</b>\n"
+            "━━━━━━━━━━━━━━━━━━━\n"
+            f"🏆 <b>Session Score:</b> You <b>{p_sc}</b> ⚔️ <b>{my_sc}</b> Partner (Ties: {ties})\n"
+            "━━━━━━━━━━━━━━━━━━━\n"
+            "<i>Tap below to play again or choose another game:</i>"
         )
         try:
             await callback.message.edit_text(my_win_card, reply_markup=duel_math_kb)
@@ -859,14 +883,21 @@ async def handle_duel_math_answer(callback: CallbackQuery) -> None:
             await callback.message.answer(my_win_card, reply_markup=duel_math_kb)
 
         try:
-            await callback.bot.send_message(chat_id=partner_id, text=win_card, reply_markup=duel_math_kb)
+            await callback.bot.send_message(chat_id=partner_id, text=partner_win_card, reply_markup=duel_math_kb)
         except Exception as e:
             logger.warning("Failed to notify math duel partner %s: %s", partner_id, e)
 
     elif status == "wrong":
-        await callback.answer(f"❌ {chosen_ans} is incorrect! Try another option!", show_alert=False)
+        await callback.answer(f"❌ {chosen_ans} is incorrect! (Attempt #{user_att}) Try another option!", show_alert=True)
+        try:
+            await callback.bot.send_message(
+                chat_id=partner_id,
+                text=f"⚠️ <i>Partner guessed incorrectly ({chosen_ans})! Quick, the math prize is still open!</i>",
+            )
+        except Exception:
+            pass
     elif status == "already_finished":
-        await callback.answer(f"Round already won! Answer was {correct_ans}.", show_alert=True)
+        await callback.answer(f"Round already finished! Answer was {correct_ans}.", show_alert=True)
     else:
         await callback.answer("Game expired.", show_alert=False)
 
@@ -885,13 +916,28 @@ async def handle_duel_rps_start(callback: CallbackQuery) -> None:
 
     partner_id = session["user2_id"] if session["user1_id"] == tg_id else session["user1_id"]
     await duel_games.start_rps_duel(session["id"], tg_id, partner_id)
+    my_sc, p_sc, ties = duel_games.get_session_score(session["id"], tg_id, partner_id)
     await callback.answer("✊ RPS duel started!")
 
     rps_duel_text = (
         "✊ <b>ROCK-PAPER-SCISSORS DUEL!</b>\n"
         "━━━━━━━━━━━━━━━━━━━\n"
-        "Tap your secret move below.\n"
-        "<i>Moves stay hidden until both players choose!</i>"
+        "Choose your secret move below.\n"
+        "<i>Moves remain hidden until both players choose!</i>\n"
+        "━━━━━━━━━━━━━━━━━━━\n"
+        f"🏆 <b>Session Score:</b> You <b>{my_sc}</b> ⚔️ <b>{p_sc}</b> Partner\n"
+        "━━━━━━━━━━━━━━━━━━━\n"
+        "👇 Tap your move:"
+    )
+    partner_rps_text = (
+        "✊ <b>ROCK-PAPER-SCISSORS DUEL!</b>\n"
+        "━━━━━━━━━━━━━━━━━━━\n"
+        "Choose your secret move below.\n"
+        "<i>Moves remain hidden until both players choose!</i>\n"
+        "━━━━━━━━━━━━━━━━━━━\n"
+        f"🏆 <b>Session Score:</b> You <b>{p_sc}</b> ⚔️ <b>{my_sc}</b> Partner\n"
+        "━━━━━━━━━━━━━━━━━━━\n"
+        "👇 Tap your move:"
     )
     rps_kb = get_rps_keyboard(prefix="cb_duel_rps")
 
@@ -901,7 +947,7 @@ async def handle_duel_rps_start(callback: CallbackQuery) -> None:
         await callback.message.answer(rps_duel_text, reply_markup=rps_kb)
 
     try:
-        await callback.bot.send_message(chat_id=partner_id, text=rps_duel_text, reply_markup=rps_kb)
+        await callback.bot.send_message(chat_id=partner_id, text=partner_rps_text, reply_markup=rps_kb)
     except Exception as e:
         logger.warning("Failed to send rps duel to partner %s: %s", partner_id, e)
 
@@ -920,60 +966,107 @@ async def handle_duel_rps_move(callback: CallbackQuery) -> None:
         await callback.answer("Chat session ended.", show_alert=True)
         return
 
-    is_finished, moves, winner_id = await duel_games.submit_rps_move(
+    partner_id = session["user2_id"] if session["user1_id"] == tg_id else session["user1_id"]
+    is_finished, moves, winner_id, (my_sc, p_sc, ties) = await duel_games.submit_rps_move(
         session["id"], tg_id, selected_move
     )
 
     if not is_finished:
         move_emoji = RPS_EMOJIS.get(selected_move, selected_move)
-        await callback.answer(f"Locked in {move_emoji}! Waiting for partner...", show_alert=True)
+        await callback.answer(f"Locked in {move_emoji}!", show_alert=False)
         try:
             await callback.message.edit_text(
-                f"✊ <b>RPS Move Locked:</b> {move_emoji}\n\n"
-                "⏳ <i>Waiting for your partner to make their choice...</i>"
+                f"✊ <b>RPS MOVE LOCKED:</b> {move_emoji}\n"
+                "━━━━━━━━━━━━━━━━━━━\n"
+                "⏳ <b>Status:</b> Waiting for your partner to choose...\n"
+                "━━━━━━━━━━━━━━━━━━━\n"
+                "<i>Moves will be revealed together as soon as partner picks!</i>"
+            )
+        except Exception:
+            pass
+
+        try:
+            nudge_kb = get_rps_keyboard(prefix="cb_duel_rps")
+            await callback.bot.send_message(
+                chat_id=partner_id,
+                text=(
+                    "⚡ <b>Your partner has LOCKED IN their move!</b>\n"
+                    "━━━━━━━━━━━━━━━━━━━\n"
+                    "👉 Quick! Pick your move below to reveal the showdown:"
+                ),
+                reply_markup=nudge_kb,
             )
         except Exception:
             pass
         return
 
-    # Both players moved: reveal!
-    u1 = session["user1_id"]
-    u2 = session["user2_id"]
-    m1_name = RPS_EMOJIS.get(moves.get(u1, "rock"), "❓")
-    m2_name = RPS_EMOJIS.get(moves.get(u2, "rock"), "❓")
+    # Both players moved: reveal showdown!
+    my_move = moves.get(tg_id, "rock")
+    partner_move = moves.get(partner_id, "rock")
+    my_m_name = RPS_EMOJIS.get(my_move, "❓")
+    p_m_name = RPS_EMOJIS.get(partner_move, "❓")
+
+    def get_rps_clash_text(m1: str, m2: str) -> str:
+        if m1 == m2:
+            return "🤝 Both picked the same move!"
+        pair = {m1, m2}
+        if pair == {"rock", "scissors"}:
+            return "💥 🪨 Rock smashes ✂️ Scissors!"
+        if pair == {"paper", "rock"}:
+            return "💥 📄 Paper covers 🪨 Rock!"
+        if pair == {"scissors", "paper"}:
+            return "💥 ✂️ Scissors cut 📄 Paper!"
+        return "⚔️ Showdown complete!"
+
+    clash_desc = get_rps_clash_text(my_move, partner_move)
 
     if winner_id is None:
-        result_title = "🤝 <b>IT'S A DRAW!</b> Both chose the same move!"
+        outcome_me = "🤝 <b>IT'S A DRAW!</b>"
+        outcome_partner = outcome_me
+    elif winner_id == tg_id:
+        outcome_me = "🏆 <b>YOU WON THIS ROUND!</b> 🥇"
+        outcome_partner = "🤖 <b>PARTNER WON THIS ROUND!</b>"
     else:
-        winner_tag = "You won! 🏆" if winner_id == tg_id else "Partner won! 🎉"
-        result_title = f"🏆 <b>RESULT:</b> {winner_tag}"
+        outcome_me = "🤖 <b>PARTNER WON THIS ROUND!</b>"
+        outcome_partner = "🏆 <b>YOU WON THIS ROUND!</b> 🥇"
 
-    results_text = (
-        "✊ <b>RPS DUEL RESULTS!</b>\n"
+    duel_rps_kb = get_duel_rematch_keyboard("rps")
+
+    my_card = (
+        "✊ <b>RPS SHOWDOWN RESULTS!</b>\n"
         "━━━━━━━━━━━━━━━━━━━\n"
-        f"• Player 1: {m1_name}\n"
-        f"• Player 2: {m2_name}\n"
+        f"👤 <b>Your Move:</b> {my_m_name}\n"
+        f"👥 <b>Partner Move:</b> {p_m_name}\n"
         "━━━━━━━━━━━━━━━━━━━\n"
-        f"{result_title}\n\n"
-        "<i>Tap below to play again or open menu:</i>"
+        f"{clash_desc}\n"
+        f"{outcome_me}\n"
+        "━━━━━━━━━━━━━━━━━━━\n"
+        f"🏆 <b>Session Score:</b> You <b>{my_sc}</b> ⚔️ <b>{p_sc}</b> Partner (Ties: {ties})\n"
+        "━━━━━━━━━━━━━━━━━━━\n"
+        "<i>Tap below for a rematch or choose another game:</i>"
+    )
+    partner_card = (
+        "✊ <b>RPS SHOWDOWN RESULTS!</b>\n"
+        "━━━━━━━━━━━━━━━━━━━\n"
+        f"👤 <b>Your Move:</b> {p_m_name}\n"
+        f"👥 <b>Partner Move:</b> {my_m_name}\n"
+        "━━━━━━━━━━━━━━━━━━━\n"
+        f"{clash_desc}\n"
+        f"{outcome_partner}\n"
+        "━━━━━━━━━━━━━━━━━━━\n"
+        f"🏆 <b>Session Score:</b> You <b>{p_sc}</b> ⚔️ <b>{my_sc}</b> Partner (Ties: {ties})\n"
+        "━━━━━━━━━━━━━━━━━━━\n"
+        "<i>Tap below for a rematch or choose another game:</i>"
     )
 
-    duel_rps_kb = InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text="✊ Play RPS Again", callback_data="cb_game:duel_rps")],
-            [InlineKeyboardButton(text="🎮 Games Menu", callback_data="cb_game:menu")],
-        ]
-    )
-
-    await callback.answer("Round complete!", show_alert=False)
+    await callback.answer("Showdown complete!", show_alert=False)
     try:
-        await callback.message.edit_text(results_text, reply_markup=duel_rps_kb)
+        await callback.message.edit_text(my_card, reply_markup=duel_rps_kb)
     except Exception:
-        await callback.message.answer(results_text, reply_markup=duel_rps_kb)
+        await callback.message.answer(my_card, reply_markup=duel_rps_kb)
 
-    partner_id = u2 if u1 == tg_id else u1
     try:
-        await callback.bot.send_message(chat_id=partner_id, text=results_text, reply_markup=duel_rps_kb)
+        await callback.bot.send_message(chat_id=partner_id, text=partner_card, reply_markup=duel_rps_kb)
     except Exception as e:
         logger.warning("Failed to send RPS result to %s: %s", partner_id, e)
 
@@ -992,14 +1085,30 @@ async def handle_duel_guess_start(callback: CallbackQuery) -> None:
 
     partner_id = session["user2_id"] if session["user1_id"] == tg_id else session["user1_id"]
     await duel_games.start_guess_duel(session["id"], tg_id, partner_id)
+    my_sc, p_sc, ties = duel_games.get_session_score(session["id"], tg_id, partner_id)
     await callback.answer("🔢 Number race started!")
 
     guess_duel_text = (
         "🔢 <b>NUMBER GUESS RACE (0–9)!</b>\n"
         "━━━━━━━━━━━━━━━━━━━\n"
-        "A secret number from <b>0</b> to <b>9</b> was chosen.\n"
-        "First person to hit the exact number wins!\n\n"
-        "Tap your guess below:"
+        "A secret digit from <b>0</b> to <b>9</b> has been chosen.\n"
+        "⚡ <b>First person to guess the exact number wins!</b>\n"
+        "━━━━━━━━━━━━━━━━━━━\n"
+        "📊 <b>Attempts:</b> You: 0 | Partner: 0\n"
+        f"🏆 <b>Session Score:</b> You <b>{my_sc}</b> ⚔️ <b>{p_sc}</b> Partner\n"
+        "━━━━━━━━━━━━━━━━━━━\n"
+        "👇 Tap your guess below:"
+    )
+    partner_guess_text = (
+        "🔢 <b>NUMBER GUESS RACE (0–9)!</b>\n"
+        "━━━━━━━━━━━━━━━━━━━\n"
+        "A secret digit from <b>0</b> to <b>9</b> has been chosen.\n"
+        "⚡ <b>First person to guess the exact number wins!</b>\n"
+        "━━━━━━━━━━━━━━━━━━━\n"
+        "📊 <b>Attempts:</b> You: 0 | Partner: 0\n"
+        f"🏆 <b>Session Score:</b> You <b>{p_sc}</b> ⚔️ <b>{my_sc}</b> Partner\n"
+        "━━━━━━━━━━━━━━━━━━━\n"
+        "👇 Tap your guess below:"
     )
     guess_kb = get_number_guess_keyboard(prefix="cb_duel_guess")
 
@@ -1009,14 +1118,14 @@ async def handle_duel_guess_start(callback: CallbackQuery) -> None:
         await callback.message.answer(guess_duel_text, reply_markup=guess_kb)
 
     try:
-        await callback.bot.send_message(chat_id=partner_id, text=guess_duel_text, reply_markup=guess_kb)
+        await callback.bot.send_message(chat_id=partner_id, text=partner_guess_text, reply_markup=guess_kb)
     except Exception as e:
         logger.warning("Failed to send guess duel to partner %s: %s", partner_id, e)
 
 
 @router.callback_query(F.data.startswith("cb_duel_guess:"))
 async def handle_duel_guess_check(callback: CallbackQuery) -> None:
-    """Checks a guess in the live Number Guess Race."""
+    """Checks a guess in the live Number Guess Race with live attempts and status."""
     if not callback.from_user or not callback.message:
         return
 
@@ -1028,35 +1137,44 @@ async def handle_duel_guess_check(callback: CallbackQuery) -> None:
         await callback.answer("Chat session ended.", show_alert=True)
         return
 
-    status, target, winner_id = await duel_games.submit_guess_duel(
+    partner_id = session["user2_id"] if session["user1_id"] == tg_id else session["user1_id"]
+    status, target, winner_id, my_att, p_att, elapsed, (my_sc, p_sc, ties) = await duel_games.submit_guess_duel(
         session["id"], tg_id, guess_digit
     )
 
     if status == "correct":
         await callback.answer("🎉 Correct! You won the race!", show_alert=True)
-        partner_id = session["user2_id"] if session["user1_id"] == tg_id else session["user1_id"]
+        duel_guess_kb = get_duel_rematch_keyboard("guess")
 
-        duel_guess_kb = InlineKeyboardMarkup(
-            inline_keyboard=[
-                [InlineKeyboardButton(text="🔢 Play Guess Again", callback_data="cb_game:duel_guess")],
-                [InlineKeyboardButton(text="🎮 Games Menu", callback_data="cb_game:menu")],
-            ]
-        )
         my_win_msg = (
-            "🎉 <b>BULLSEYE! YOU WON!</b>\n"
+            "🎉 <b>BULLSEYE! YOU WON THE RACE!</b> 🥇\n"
             "━━━━━━━━━━━━━━━━━━━\n"
-            f"The secret number was <b>{target}</b>!\n"
-            "You guessed it first and won the race! 🥇\n"
+            f"🎯 <b>Secret Number:</b> <b>{target}</b>\n"
+            "⚡ <b>Winner:</b> YOU guessed it first!\n"
             "━━━━━━━━━━━━━━━━━━━\n"
-            "<i>Tap below to play again or open menu:</i>"
+            "📊 <b>Duel Stats:</b>\n"
+            f"• 🎯 Your Attempts: <b>{my_att}</b>\n"
+            f"• 👥 Partner Attempts: <b>{p_att}</b>\n"
+            f"• ⏱️ Elapsed Time: <b>{elapsed}s</b>\n"
+            "━━━━━━━━━━━━━━━━━━━\n"
+            f"🏆 <b>Session Score:</b> You <b>{my_sc}</b> ⚔️ <b>{p_sc}</b> Partner (Ties: {ties})\n"
+            "━━━━━━━━━━━━━━━━━━━\n"
+            "<i>Ready for another round? Tap below!</i>"
         )
         their_win_msg = (
-            "🎉 <b>RACE OVER!</b>\n"
+            "🏁 <b>RACE OVER!</b>\n"
             "━━━━━━━━━━━━━━━━━━━\n"
-            f"The secret number was <b>{target}</b>!\n"
-            "Your partner guessed it first and won the race! 🥇\n"
+            f"🎯 <b>Secret Number:</b> <b>{target}</b>\n"
+            "⚡ <b>Winner:</b> Your partner guessed it first! 🥇\n"
             "━━━━━━━━━━━━━━━━━━━\n"
-            "<i>Tap below to play again or open menu:</i>"
+            "📊 <b>Duel Stats:</b>\n"
+            f"• 👥 Winner Attempts: <b>{my_att}</b>\n"
+            f"• 🎯 Your Attempts: <b>{p_att}</b>\n"
+            f"• ⏱️ Elapsed Time: <b>{elapsed}s</b>\n"
+            "━━━━━━━━━━━━━━━━━━━\n"
+            f"🏆 <b>Session Score:</b> You <b>{p_sc}</b> ⚔️ <b>{my_sc}</b> Partner (Ties: {ties})\n"
+            "━━━━━━━━━━━━━━━━━━━\n"
+            "<i>Ready for another round? Tap below!</i>"
         )
         try:
             await callback.message.edit_text(my_win_msg, reply_markup=duel_guess_kb)
@@ -1068,17 +1186,47 @@ async def handle_duel_guess_check(callback: CallbackQuery) -> None:
         except Exception as e:
             logger.warning("Failed to notify guess duel partner %s: %s", partner_id, e)
 
-    elif status == "higher":
-        await callback.answer(f"⬆️ Secret number is HIGHER than {guess_digit}!", show_alert=False)
-    elif status == "lower":
-        await callback.answer(f"⬇️ Secret number is LOWER than {guess_digit}!", show_alert=False)
+    elif status in ("higher", "lower"):
+        direction = "HIGHER ⬆️" if status == "higher" else "LOWER ⬇️"
+        hint_icon = "⬆️" if status == "higher" else "⬇️"
+        await callback.answer(f"{hint_icon} Secret number is {direction} than {guess_digit}!", show_alert=False)
+
+        updated_kb = get_number_guess_keyboard(prefix="cb_duel_guess")
+        my_status_text = (
+            "🔢 <b>NUMBER GUESS RACE (0–9)!</b>\n"
+            "━━━━━━━━━━━━━━━━━━━\n"
+            f"❌ Your guess <b>{guess_digit}</b> was too {'low' if status == 'higher' else 'high'}! (Go <b>{direction}</b>)\n"
+            "━━━━━━━━━━━━━━━━━━━\n"
+            f"📊 <b>Attempts:</b> You: <b>{my_att}</b> | Partner: <b>{p_att}</b>\n"
+            f"🏆 <b>Session Score:</b> You <b>{my_sc}</b> ⚔️ <b>{p_sc}</b> Partner\n"
+            "━━━━━━━━━━━━━━━━━━━\n"
+            "👇 Tap your next guess:"
+        )
+        try:
+            await callback.message.edit_text(my_status_text, reply_markup=updated_kb)
+        except Exception:
+            pass
+
+        try:
+            await callback.bot.send_message(
+                chat_id=partner_id,
+                text=(
+                    f"👀 <i>Partner tried {guess_digit} ({'Too low ⬆️' if status == 'higher' else 'Too high ⬇️'}). "
+                    f"Partner attempts: {my_att}</i>"
+                ),
+            )
+        except Exception:
+            pass
+
     elif status == "already_finished":
         await callback.answer(f"Race already finished! Target was {target}.", show_alert=True)
+    else:
+        await callback.answer("Game session expired.", show_alert=False)
 
 
 @router.callback_query(F.data == "cb_game:duel_dice")
 async def handle_duel_dice(callback: CallbackQuery) -> None:
-    """Rolls a lucky dice for both partners in active chat, or solo if alone."""
+    """Starter rolls lucky dice and challenges partner to beat it, or solo if alone."""
     if not callback.from_user or not callback.message:
         return
 
@@ -1089,57 +1237,117 @@ async def handle_duel_dice(callback: CallbackQuery) -> None:
         return
 
     partner_id = session["user2_id"] if session["user1_id"] == tg_id else session["user1_id"]
-    await callback.answer("🎲 Rolling dice for both players...")
+    starter_roll = await duel_games.start_dice_duel(session["id"], session["user1_id"], session["user2_id"], tg_id)
+    my_sc, p_sc, ties = duel_games.get_session_score(session["id"], tg_id, partner_id)
 
-    r_me = random.randint(1, 6)
-    r_them = random.randint(1, 6)
-    duel_id = random.randint(100, 999)
+    await callback.answer(f"🎲 You rolled a {starter_roll}!")
 
-    if r_me > r_them:
-        res_me = "🎉 <b>YOU WON!</b> (Your roll was higher) 🏆"
-        res_them = "🤖 <b>PARTNER WON!</b> (Their roll was higher)"
-    elif r_them > r_me:
-        res_me = "🤖 <b>PARTNER WON!</b> (Their roll was higher)"
-        res_them = "🎉 <b>YOU WON!</b> (Your roll was higher) 🏆"
-    else:
-        res_me = "🤝 <b>IT'S A TIE!</b> Both rolled the same!"
-        res_them = res_me
-
-    msg_me = (
-        f"🎲 <b>LUCKY DICE DUEL!</b> (Duel #{duel_id})\n"
+    starter_text = (
+        "🎲 <b>LUCKY DICE DUEL!</b>\n"
         "━━━━━━━━━━━━━━━━━━━\n"
-        f"👤 <b>Your Roll:</b> 🎲 <b>{r_me}</b>\n"
-        f"👤 <b>Partner's Roll:</b> 🎲 <b>{r_them}</b>\n"
+        f"🎯 <b>Your Roll:</b> 🎲 <b>{starter_roll}</b>\n"
+        "⏳ <b>Status:</b> Waiting for partner to roll challenge dice...\n"
         "━━━━━━━━━━━━━━━━━━━\n"
-        f"{res_me}\n\n"
-        "<i>Tap 🎲 Roll Again to roll another pair!</i>"
+        f"🏆 <b>Session Score:</b> You <b>{my_sc}</b> ⚔️ <b>{p_sc}</b> Partner\n"
+        "━━━━━━━━━━━━━━━━━━━\n"
+        "<i>Your partner was sent a challenge roll button!</i>"
     )
-    msg_them = (
-        f"🎲 <b>LUCKY DICE DUEL!</b> (Duel #{duel_id})\n"
+    partner_challenge_text = (
+        "🎲 <b>DICE DUEL CHALLENGE!</b>\n"
         "━━━━━━━━━━━━━━━━━━━\n"
-        f"👤 <b>Your Roll:</b> 🎲 <b>{r_them}</b>\n"
-        f"👤 <b>Partner's Roll:</b> 🎲 <b>{r_me}</b>\n"
+        f"👤 <b>Your partner rolled:</b> 🎲 <b>{starter_roll}</b>\n"
+        "⚡ <b>Can you roll higher and win?</b>\n"
         "━━━━━━━━━━━━━━━━━━━\n"
-        f"{res_them}\n\n"
-        "<i>Tap 🎲 Roll Again to roll another pair!</i>"
+        f"🏆 <b>Session Score:</b> You <b>{p_sc}</b> ⚔️ <b>{my_sc}</b> Partner\n"
+        "━━━━━━━━━━━━━━━━━━━\n"
+        "👇 Tap below to roll your challenge dice:"
     )
-
-    duel_dice_kb = InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text="🎲 Roll Again", callback_data="cb_game:duel_dice")],
-            [InlineKeyboardButton(text="🎮 Games Menu", callback_data="cb_game:menu")],
-        ]
-    )
+    challenge_kb = get_dice_challenge_keyboard()
 
     try:
-        await callback.message.edit_text(msg_me, reply_markup=duel_dice_kb)
+        await callback.message.edit_text(starter_text)
     except Exception:
-        await callback.message.answer(msg_me, reply_markup=duel_dice_kb)
+        await callback.message.answer(starter_text)
 
     try:
-        await callback.bot.send_message(chat_id=partner_id, text=msg_them, reply_markup=duel_dice_kb)
+        await callback.bot.send_message(
+            chat_id=partner_id, text=partner_challenge_text, reply_markup=challenge_kb
+        )
     except Exception as e:
-        logger.warning("Failed to send dice duel to %s: %s", partner_id, e)
+        logger.warning("Failed to send dice challenge to %s: %s", partner_id, e)
+
+
+@router.callback_query(F.data == "cb_game:duel_dice_roll")
+async def handle_duel_dice_roll(callback: CallbackQuery) -> None:
+    """Partner rolls challenge dice to complete the Dice Duel showdown."""
+    if not callback.from_user or not callback.message:
+        return
+
+    tg_id = callback.from_user.id
+    session = await database.get_active_session(tg_id)
+    if not session:
+        await callback.answer("Chat session ended.", show_alert=True)
+        return
+
+    partner_id = session["user2_id"] if session["user1_id"] == tg_id else session["user1_id"]
+    status, starter_roll, challenger_roll, winner_id, (my_sc, p_sc, ties) = await duel_games.submit_dice_roll(
+        session["id"], tg_id
+    )
+
+    if status == "same_player":
+        await callback.answer("You started this duel! Waiting for partner to roll.", show_alert=True)
+        return
+    elif status in ("no_game", "already_finished"):
+        await callback.answer("Duel round already completed.", show_alert=True)
+        return
+
+    await callback.answer(f"🎲 You rolled a {challenger_roll}!", show_alert=False)
+    duel_rematch_kb = get_duel_rematch_keyboard("dice")
+
+    if winner_id is None:
+        clash_outcome_me = "🤝 <b>IT'S A TIE!</b> Both rolled the same number!"
+        clash_outcome_partner = clash_outcome_me
+    elif winner_id == tg_id:
+        clash_outcome_me = f"🏆 <b>YOU WON!</b> ({challenger_roll} beats {starter_roll}) 🥇"
+        clash_outcome_partner = f"🤖 <b>PARTNER WON!</b> ({challenger_roll} beats {starter_roll})"
+    else:
+        clash_outcome_me = f"🤖 <b>PARTNER WON!</b> ({starter_roll} beats {challenger_roll})"
+        clash_outcome_partner = f"🏆 <b>YOU WON!</b> ({starter_roll} beats {challenger_roll}) 🥇"
+
+    my_card = (
+        "🎲 <b>DICE DUEL SHOWDOWN!</b>\n"
+        "━━━━━━━━━━━━━━━━━━━\n"
+        f"👤 <b>Your Roll:</b> 🎲 <b>{challenger_roll}</b>\n"
+        f"👥 <b>Partner Roll:</b> 🎲 <b>{starter_roll}</b>\n"
+        "━━━━━━━━━━━━━━━━━━━\n"
+        f"{clash_outcome_me}\n"
+        "━━━━━━━━━━━━━━━━━━━\n"
+        f"🏆 <b>Session Score:</b> You <b>{my_sc}</b> ⚔️ <b>{p_sc}</b> Partner (Ties: {ties})\n"
+        "━━━━━━━━━━━━━━━━━━━\n"
+        "<i>Tap below to roll again or choose another game:</i>"
+    )
+    partner_card = (
+        "🎲 <b>DICE DUEL SHOWDOWN!</b>\n"
+        "━━━━━━━━━━━━━━━━━━━\n"
+        f"👤 <b>Your Roll:</b> 🎲 <b>{starter_roll}</b>\n"
+        f"👥 <b>Partner Roll:</b> 🎲 <b>{challenger_roll}</b>\n"
+        "━━━━━━━━━━━━━━━━━━━\n"
+        f"{clash_outcome_partner}\n"
+        "━━━━━━━━━━━━━━━━━━━\n"
+        f"🏆 <b>Session Score:</b> You <b>{p_sc}</b> ⚔️ <b>{my_sc}</b> Partner (Ties: {ties})\n"
+        "━━━━━━━━━━━━━━━━━━━\n"
+        "<i>Tap below to roll again or choose another game:</i>"
+    )
+
+    try:
+        await callback.message.edit_text(my_card, reply_markup=duel_rematch_kb)
+    except Exception:
+        await callback.message.answer(my_card, reply_markup=duel_rematch_kb)
+
+    try:
+        await callback.bot.send_message(chat_id=partner_id, text=partner_card, reply_markup=duel_rematch_kb)
+    except Exception as e:
+        logger.warning("Failed to notify dice duel starter %s: %s", partner_id, e)
 
 
 @router.message(Command("gender"))
@@ -1433,6 +1641,7 @@ async def handle_next_command(message: Message) -> None:
         await execute_find_flow(message, from_user)
         return
 
+    duel_games.reset_session(closed_session["id"])
     partner_id = (
         closed_session["user2_id"]
         if closed_session["user1_id"] == tg_id
@@ -1521,6 +1730,7 @@ async def handle_stop_command(message: Message) -> None:
 
     closed_session = await database.close_session_for_user(tg_id)
     if closed_session:
+        duel_games.reset_session(closed_session["id"])
         partner_id = (
             closed_session["user2_id"]
             if closed_session["user1_id"] == tg_id
