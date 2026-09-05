@@ -12,9 +12,8 @@ def get_idle_reply_keyboard() -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(
         keyboard=[
             [KeyboardButton(text="🔍 Find Stranger")],
-            [KeyboardButton(text="🎮 Mini Games"), KeyboardButton(text="🎲 Icebreakers")],
-            [KeyboardButton(text="👤 Profile"), KeyboardButton(text="🚀 Invite Friends")],
-            [KeyboardButton(text="❓ Help")],
+            [KeyboardButton(text="🎮 Games"), KeyboardButton(text="🎲 Icebreaker")],
+            [KeyboardButton(text="👤 Profile"), KeyboardButton(text="❓ Help")],
         ],
         resize_keyboard=True,
         is_persistent=True,
@@ -25,9 +24,12 @@ def get_chat_reply_keyboard() -> ReplyKeyboardMarkup:
     """Persistent mobile bottom keyboard when user is actively in a chat."""
     return ReplyKeyboardMarkup(
         keyboard=[
-            [KeyboardButton(text="⏭️ Next Stranger"), KeyboardButton(text="⏹️ End Chat")],
-            [KeyboardButton(text="🎲 Send Icebreaker"), KeyboardButton(text="🎮 Play Game")],
-            [KeyboardButton(text="🚨 Report User")],
+            [KeyboardButton(text="⏭️ Next"), KeyboardButton(text="⏹️ End")],
+            [
+                KeyboardButton(text="🎲 Icebreaker"),
+                KeyboardButton(text="🎮 Game"),
+                KeyboardButton(text="🚨 Report"),
+            ],
         ],
         resize_keyboard=True,
         is_persistent=True,
@@ -72,23 +74,23 @@ def get_profile_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
-                InlineKeyboardButton(text="👤 Change Gender", callback_data="cb_open_gender"),
-                InlineKeyboardButton(text="🎂 Change Age", callback_data="cb_open_age"),
+                InlineKeyboardButton(text="👤 Gender", callback_data="cb_open_gender"),
+                InlineKeyboardButton(text="🎂 Age", callback_data="cb_open_age"),
             ],
             [
-                InlineKeyboardButton(text="🔍 Find Next Stranger", callback_data="cb_start_find"),
+                InlineKeyboardButton(text="🔍 Find Stranger", callback_data="cb_start_find"),
             ],
         ]
     )
 
 
 def get_partner_disconnected_keyboard() -> InlineKeyboardMarkup:
-    """Returns inline keyboard when partner disconnects: Find Next or Change Profile."""
+    """Returns clean inline keyboard when partner disconnects: Find Next or Profile."""
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
-                InlineKeyboardButton(text="🔍 Find Next Stranger", callback_data="cb_start_find"),
-                InlineKeyboardButton(text="👤 Change Profile", callback_data="cb_open_profile"),
+                InlineKeyboardButton(text="🔍 Find Next", callback_data="cb_start_find"),
+                InlineKeyboardButton(text="👤 Profile", callback_data="cb_open_profile"),
             ]
         ]
     )
@@ -132,19 +134,19 @@ def get_report_reasons_keyboard() -> InlineKeyboardMarkup:
 
 
 def get_welcome_keyboard() -> InlineKeyboardMarkup:
-    """Returns inline keyboard for the upgraded welcome greeting."""
+    """Returns minimal inline keyboard for welcome greeting."""
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
-                InlineKeyboardButton(text="🔍 Find a Stranger", callback_data="cb_start_find"),
-                InlineKeyboardButton(text="❓ Help", callback_data="cb_help"),
+                InlineKeyboardButton(text="🔍 Start Chatting", callback_data="cb_start_find"),
             ],
             [
                 InlineKeyboardButton(text="👤 Set Gender", callback_data="cb_open_gender"),
                 InlineKeyboardButton(text="🎂 Set Age", callback_data="cb_open_age"),
             ],
             [
-                InlineKeyboardButton(text="🎲 Random Icebreaker", callback_data="cb_get_icebreaker"),
+                InlineKeyboardButton(text="🎮 Games", callback_data="cb_game:menu"),
+                InlineKeyboardButton(text="❓ Help", callback_data="cb_help"),
             ],
         ]
     )
@@ -168,36 +170,35 @@ def get_invite_keyboard(bot_username: str = "StrangersChattingBot") -> InlineKey
 
 
 def get_games_menu_keyboard(is_in_chat: bool = False) -> InlineKeyboardMarkup:
-    """Returns inline keyboard for selecting games based on whether user is in active chat."""
+    """Returns clean inline keyboard for selecting games."""
     if is_in_chat:
         return InlineKeyboardMarkup(
             inline_keyboard=[
                 [
-                    InlineKeyboardButton(text="⚡ Math Speed Duel", callback_data="cb_game:duel_math"),
+                    InlineKeyboardButton(text="⚡ Math Duel", callback_data="cb_game:duel_math"),
                     InlineKeyboardButton(text="✊ RPS Duel", callback_data="cb_game:duel_rps"),
                 ],
                 [
-                    InlineKeyboardButton(text="🔢 Number Guess Race", callback_data="cb_game:duel_guess"),
-                    InlineKeyboardButton(text="🎲 Dice Roll Duel", callback_data="cb_game:duel_dice"),
+                    InlineKeyboardButton(text="🔢 Number Guess", callback_data="cb_game:duel_guess"),
+                    InlineKeyboardButton(text="🎲 Dice Duel", callback_data="cb_game:duel_dice"),
                 ],
                 [
-                    InlineKeyboardButton(text="🎲 3D Animated Dice", callback_data="cb_game:animated_dice"),
-                    InlineKeyboardButton(text="🕹️ Solo Games Menu", callback_data="cb_game:solo_menu"),
+                    InlineKeyboardButton(text="🕹️ Solo Games", callback_data="cb_game:solo_menu"),
                 ],
             ]
         )
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
-                InlineKeyboardButton(text="🔢 Guess Number (0–9)", callback_data="cb_game:solo_guess"),
+                InlineKeyboardButton(text="🔢 Number Guess", callback_data="cb_game:solo_guess"),
                 InlineKeyboardButton(text="🧮 Math Puzzle", callback_data="cb_game:solo_math"),
             ],
             [
                 InlineKeyboardButton(text="✊ Rock-Paper-Scissors", callback_data="cb_game:solo_rps"),
-                InlineKeyboardButton(text="🎲 Lucky Dice Roll", callback_data="cb_game:solo_dice"),
+                InlineKeyboardButton(text="🎲 Lucky Dice", callback_data="cb_game:solo_dice"),
             ],
             [
-                InlineKeyboardButton(text="🎲 3D Animated Dice", callback_data="cb_game:animated_dice"),
+                InlineKeyboardButton(text="🎲 3D Physics Dice", callback_data="cb_game:animated_dice"),
             ],
         ]
     )

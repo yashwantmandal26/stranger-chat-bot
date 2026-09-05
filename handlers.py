@@ -39,22 +39,19 @@ logger = logging.getLogger(__name__)
 router = Router(name="base_handlers")
 
 HELP_TEXT = (
-    "📖 <b>Stranger Chat Bot — Command Guide</b>\n"
-    "━━━━━━━━━━━━━━━━━━━\n"
-    "• <b>/find</b> — 🔍 Search for a partner (opposite gender preferred)\n"
-    "• <b>/next</b> — ⏭️ Skip current stranger & find someone new\n"
-    "• <b>/stop</b> — ⏹️ End active chat or cancel queue search\n"
-    "• <b>/games</b> — 🎮 Play fun mini-games (Solo & Partner duels)\n"
-    "• <b>/icebreaker</b> — 🎲 Send a fun conversation starter\n"
-    "• <b>/profile</b> — 👤 View your anonymous profile card\n"
-    "• <b>/gender</b> — 👤 View or change your gender preference\n"
-    "• <b>/age</b> — 🎂 View or change your age range\n"
-    "• <b>/report</b> — 🚨 Report inappropriate partner\n"
-    "• <b>/invite</b> — 🚀 Share the bot with your friends\n"
-    "• <b>/help</b> — ❓ Show this help guide\n"
-    "• <b>/start</b> — 🔄 View bot status & main menu\n"
-    "━━━━━━━━━━━━━━━━━━━\n"
-    "🛡️ <i>All chats are 100% anonymous. Be respectful and have fun!</i>"
+    "📖 <b>Stranger Chat — Commands</b>\n\n"
+    "• <b>/find</b> — 🔍 Search for a stranger\n"
+    "• <b>/next</b> — ⏭️ Skip to next stranger\n"
+    "• <b>/stop</b> — ⏹️ End current chat\n"
+    "• <b>/games</b> — 🎮 Mini-games & partner duels\n"
+    "• <b>/icebreaker</b> — 🎲 Conversation starter\n"
+    "• <b>/profile</b> — 👤 View your profile\n"
+    "• <b>/gender</b> — 👤 Set gender preference\n"
+    "• <b>/age</b> — 🎂 Set age bracket\n"
+    "• <b>/report</b> — 🚨 Report inappropriate user\n"
+    "• <b>/invite</b> — 🚀 Invite friends\n"
+    "• <b>/help</b> — ❓ Help & commands\n\n"
+    "🛡️ <i>100% anonymous. Be kind & respectful!</i>"
 )
 
 
@@ -67,7 +64,7 @@ def format_gender_display(gender: Any) -> str:
         return "Female 👩"
     elif g == "prefer_not_to_say":
         return "Prefer not to say 🎭"
-    return "Not specified 👤"
+    return "Not set 👤"
 
 
 def format_age_display(age_range: Any) -> str:
@@ -81,7 +78,7 @@ def format_age_display(age_range: Any) -> str:
         return "25–35 💼"
     elif a in ("40+", "40_plus", "40"):
         return "40+ 🌟"
-    return "Not specified"
+    return "Not set"
 
 
 def get_match_found_text(partner_gender: Any, partner_age: Any) -> str:
@@ -89,11 +86,9 @@ def get_match_found_text(partner_gender: Any, partner_age: Any) -> str:
     g_display = format_gender_display(partner_gender)
     a_display = format_age_display(partner_age)
     return (
-        "🎉 <b>Partner Found!</b>\n"
-        "━━━━━━━━━━━━━━━━━━━\n"
-        f"👤 <b>Gender:</b> {g_display}\n"
-        f"🎂 <b>Age:</b> {a_display}\n"
-        "━━━━━━━━━━━━━━━━━━━\n"
+        "🎉 <b>Connected with a Stranger!</b>\n\n"
+        f"• <b>Gender:</b> {g_display}\n"
+        f"• <b>Age:</b> {a_display}\n\n"
         "<i>Say hello 👋 to start chatting!</i>"
     )
 
@@ -175,30 +170,24 @@ async def handle_start(message: Message) -> None:
     age_display = format_age_display(user_age)
 
     gender_status = (
-        f"👤 <b>Gender:</b> {gender_display}\n"
+        f"• <b>Gender:</b> {gender_display}\n"
         if user_gender in ("male", "female", "prefer_not_to_say")
-        else "👤 <b>Gender:</b> <i>Not set (tap Set Gender below)</i>\n"
+        else "• <b>Gender:</b> <i>Not set (tap Set Gender below)</i>\n"
     )
     age_status = (
-        f"🎂 <b>Age Range:</b> {age_display}\n"
+        f"• <b>Age:</b> {age_display}\n"
         if user_age in ("below_18", "18-25", "25-35", "40+")
-        else "🎂 <b>Age Range:</b> <i>Not set (tap Set Age below)</i>\n"
+        else "• <b>Age:</b> <i>Not set (tap Set Age below)</i>\n"
     )
 
     welcome_text = (
-        f"👋 <b>Welcome to Stranger Chat{name_display}!</b>\n"
-        "━━━━━━━━━━━━━━━━━━━\n"
+        f"👋 <b>Welcome to Stranger Chat{name_display}!</b>\n\n"
         "Connect and chat anonymously with verified people worldwide. "
         "No names, no profiles — pure authentic connection.\n\n"
-        "📜 <b>Community Rules:</b>\n"
-        "• Be kind & respectful to strangers.\n"
-        "• No spam, advertisements, or external links.\n"
-        "• Strictly no NSFW, explicit, or illegal content.\n"
-        "⚠️ <i>Violations result in an immediate permanent ban.</i>\n\n"
         f"{gender_status}"
-        f"{age_status}"
-        "━━━━━━━━━━━━━━━━━━━\n"
-        "👉 <i>Tap <b>🔍 Find a Stranger</b> to start chatting!</i>"
+        f"{age_status}\n"
+        "💡 <i>Be respectful. No NSFW or spam.</i>\n\n"
+        "👉 Tap <b>🔍 Start Chatting</b> to begin!"
     )
 
     try:
@@ -216,7 +205,7 @@ async def handle_start(message: Message) -> None:
 
     try:
         await message.answer(
-            "💡 <i>Use the quick action buttons below anytime:</i>",
+            "💬 <i>Menu ready below.</i>",
             reply_markup=get_idle_reply_keyboard(),
         )
     except Exception as e:
@@ -246,7 +235,7 @@ async def handle_end_and_restart(callback: CallbackQuery) -> None:
 
 
 @router.message(Command("help"))
-@router.message(F.text == "❓ Help")
+@router.message(F.text.in_({"❓ Help", "❓ Help & Rules"}))
 async def handle_help_command(message: Message) -> None:
     """Displays a clean menu of all commands."""
     await message.answer(HELP_TEXT, reply_markup=get_idle_reply_keyboard())
@@ -261,16 +250,14 @@ async def handle_help_callback(callback: CallbackQuery) -> None:
 
 
 @router.message(Command("invite"))
-@router.message(F.text == "🚀 Invite Friends")
+@router.message(F.text.in_({"🚀 Invite Friends", "🚀 Share Bot"}))
 async def handle_invite_command(message: Message) -> None:
     """Provides a viral shareable invite message and a one-tap Telegram share button."""
     bot_user = (await message.bot.get_me()).username or "StrangersChattingBot"
     invite_text = (
-        "🚀 <b>Invite Friends to Stranger Chat!</b>\n"
-        "━━━━━━━━━━━━━━━━━━━\n"
+        "🚀 <b>Invite Friends to Stranger Chat</b>\n\n"
         "Share this link with your friends or Telegram groups:\n\n"
-        f"<i>\"⚡ I'm chatting with new people worldwide on this free anonymous bot! Join here: t.me/{bot_user}\"</i>\n"
-        "━━━━━━━━━━━━━━━━━━━\n"
+        f"<i>\"⚡ I'm chatting with new people worldwide on this free anonymous bot! Join here: t.me/{bot_user}\"</i>\n\n"
         "Tap the button below to share directly with friends:"
     )
     await message.answer(invite_text, reply_markup=get_invite_keyboard(bot_user))
@@ -291,8 +278,7 @@ async def handle_stats_command(message: Message) -> None:
     queue_stats = await match_queue.get_stats()
 
     stats_text = (
-        "📊 <b>Stranger Chat Bot — Admin Dashboard</b>\n"
-        "━━━━━━━━━━━━━━━━━━━\n"
+        "📊 <b>Stranger Chat Bot — Admin Dashboard</b>\n\n"
         "👥 <b>User Statistics:</b>\n"
         f"• Total Users: <b>{db_stats['total_users']}</b>\n"
         f"• Male: <b>{db_stats['male_users']}</b> | Female: <b>{db_stats['female_users']}</b>\n"
@@ -309,8 +295,7 @@ async def handle_stats_command(message: Message) -> None:
         f"• Males in Queue: <b>{queue_stats['males']}</b>\n"
         f"• Females in Queue: <b>{queue_stats['females']}</b>\n"
         f"• Prefer Not to Say: <b>{queue_stats.get('prefer_not_to_say', 0)}</b>\n"
-        f"• VIP Premium Waiting: <b>{queue_stats['premiums']}</b>\n"
-        "━━━━━━━━━━━━━━━━━━━"
+        f"• VIP Premium Waiting: <b>{queue_stats['premiums']}</b>"
     )
     await message.answer(stats_text)
 
@@ -321,29 +306,27 @@ async def build_profile_card(from_user, db_user: dict[str, Any]) -> str:
     user_gender = format_gender_display(db_user.get("gender"))
     user_age = format_age_display(db_user.get("age_range"))
     is_premium = await database.is_premium_active(from_user.id)
-    plan_badge = "⭐ VIP Member (Priority Queue)" if is_premium else "Standard Member (Free)"
+    plan_badge = "⭐ VIP Member" if is_premium else "Standard (Free)"
     chats_count = db_user.get("chat_count", 0)
     strikes = db_user.get("strikes", 0)
-    reputation = "⭐️⭐️⭐️⭐️⭐️ Excellent" if strikes == 0 else f"⚠️ Caution ({strikes} strikes)"
+    reputation = "⭐️ 100% Clean" if strikes == 0 else f"⚠️ {strikes} strike(s)"
 
     return (
-        "👤 <b>Your Stranger Chat Profile</b>\n"
-        "━━━━━━━━━━━━━━━━━━━\n"
-        f"🆔 <b>Anonymous ID:</b> <code>#SC-{str(from_user.id)[-6:]}</code>\n"
-        f"⚧️ <b>Gender:</b> {user_gender}\n"
-        f"🎂 <b>Age Range:</b> {user_age}\n"
-        f"⭐ <b>Membership:</b> {plan_badge}\n"
-        f"⏳ <b>Account Age:</b> ~{age_days} days (Verified ✅)\n"
-        f"💬 <b>Chats Completed:</b> {chats_count}\n"
-        f"🛡️ <b>Reputation:</b> {reputation}\n"
-        "━━━━━━━━━━━━━━━━━━━\n"
-        "<i>Update your preferences anytime using buttons below:</i>"
+        "👤 <b>Anonymous Profile</b>\n\n"
+        f"• <b>ID:</b> <code>#SC-{str(from_user.id)[-6:]}</code>\n"
+        f"• <b>Gender:</b> {user_gender}\n"
+        f"• <b>Age:</b> {user_age}\n"
+        f"• <b>Membership:</b> {plan_badge}\n"
+        f"• <b>Account Age:</b> ~{age_days} days\n"
+        f"• <b>Chats Completed:</b> {chats_count}\n"
+        f"• <b>Reputation:</b> {reputation}\n\n"
+        "<i>Update your preferences below:</i>"
     )
 
 
 @router.message(Command("profile"))
 @router.message(Command("me"))
-@router.message(F.text == "👤 Profile")
+@router.message(F.text.in_({"👤 Profile", "👤 My Profile"}))
 async def handle_profile_command(message: Message) -> None:
     """Displays the user's sleek anonymous profile card."""
     from_user = message.from_user
@@ -379,7 +362,7 @@ async def handle_open_profile_callback(callback: CallbackQuery) -> None:
 
 
 @router.message(Command("icebreaker"))
-@router.message(F.text.in_({"🎲 Icebreakers", "🎲 Send Icebreaker"}))
+@router.message(F.text.in_({"🎲 Icebreaker", "🎲 Icebreakers", "🎲 Send Icebreaker"}))
 async def handle_icebreaker(message: Message) -> None:
     """Sends a friendly conversation starter directly into the chat like a normal question."""
     from_user = message.from_user
@@ -430,7 +413,7 @@ async def handle_icebreaker_callback(callback: CallbackQuery) -> None:
 # =========================================================
 @router.message(Command("game"))
 @router.message(Command("games"))
-@router.message(F.text.in_({"🎮 Mini Games", "🎮 Play Game"}))
+@router.message(F.text.in_({"🎮 Games", "🎮 Game", "🎮 Mini Games", "🎮 Play Game"}))
 async def handle_games_command(message: Message) -> None:
     """Displays the interactive mini-games hub (adapted for solo or partner duel)."""
     from_user = message.from_user
@@ -442,27 +425,23 @@ async def handle_games_command(message: Message) -> None:
 
     if is_in_chat:
         menu_text = (
-            "🎮 <b>Partner Game Room</b>\n"
-            "━━━━━━━━━━━━━━━━━━━\n"
-            "Challenge your stranger partner to a real-time mini-game!\n\n"
-            "• ⚡ <b>Math Speed Duel:</b> First to solve wins!\n"
-            "• ✊ <b>RPS Duel:</b> Simultaneous hidden moves!\n"
-            "• 🔢 <b>Number Guess Race:</b> First to crack 0–9 wins!\n"
-            "• 🎲 <b>Dice Roll Duel:</b> Roll higher than your partner!\n"
-            "━━━━━━━━━━━━━━━━━━━\n"
-            "Tap an option below to start:"
+            "🎮 <b>Partner Game Room</b>\n\n"
+            "Challenge your partner to a real-time mini-game!\n\n"
+            "• ⚡ <b>Math Speed Duel:</b> First to solve wins\n"
+            "• ✊ <b>RPS Duel:</b> Simultaneous hidden moves\n"
+            "• 🔢 <b>Number Guess Race:</b> First to crack 0–9 wins\n"
+            "• 🎲 <b>Dice Roll Duel:</b> Highest roll wins\n\n"
+            "Choose a game below:"
         )
     else:
         menu_text = (
-            "🎮 <b>Mini Games Arcade</b>\n"
-            "━━━━━━━━━━━━━━━━━━━\n"
-            "Enjoy quick games while waiting for a match!\n\n"
+            "🎮 <b>Mini Games Arcade</b>\n\n"
+            "Quick games to play anytime:\n\n"
             "• 🔢 <b>Guess the Number (0–9)</b>\n"
             "• 🧮 <b>Math Speed Puzzle (+, -, ×, ÷)</b>\n"
             "• ✊ <b>Rock-Paper-Scissors</b> (vs Bot)\n"
-            "• 🎲 <b>Lucky Dice Roll</b>\n"
-            "━━━━━━━━━━━━━━━━━━━\n"
-            "Select a game to play:"
+            "• 🎲 <b>Lucky Dice Roll</b>\n\n"
+            "Select a game below:"
         )
 
     await message.answer(
@@ -482,13 +461,9 @@ async def handle_game_menu_callback(callback: CallbackQuery) -> None:
     is_in_chat = active_session is not None
 
     menu_text = (
-        "🎮 <b>Partner Game Room</b>\n"
-        "━━━━━━━━━━━━━━━━━━━\n"
-        "Challenge your partner to a live mini-game!"
+        "🎮 <b>Partner Game Room</b>\n\nChallenge your partner to a live duel:"
         if is_in_chat
-        else "🎮 <b>Mini Games Arcade</b>\n"
-        "━━━━━━━━━━━━━━━━━━━\n"
-        "Select a game to play solo:"
+        else "🎮 <b>Mini Games Arcade</b>\n\nSelect a game to play solo:"
     )
     try:
         await callback.message.edit_text(
@@ -506,9 +481,7 @@ async def handle_solo_menu_callback(callback: CallbackQuery) -> None:
     if callback.message:
         try:
             await callback.message.edit_text(
-                "🕹️ <b>Solo Games Arcade</b>\n"
-                "━━━━━━━━━━━━━━━━━━━\n"
-                "Pick a solo game below:",
+                "🕹️ <b>Solo Games Arcade</b>\n\nPick a solo game below:",
                 reply_markup=get_games_menu_keyboard(is_in_chat=False),
             )
         except Exception as e:
@@ -525,8 +498,7 @@ async def handle_solo_guess_start(callback: CallbackQuery) -> None:
 
     solo_games.start_guess(callback.from_user.id)
     guess_text = (
-        "🔢 <b>Guess the Number (0–9)!</b>\n"
-        "━━━━━━━━━━━━━━━━━━━\n"
+        "🔢 <b>Guess the Number (0–9)</b>\n\n"
         "I'm thinking of a secret digit between <b>0</b> and <b>9</b>.\n"
         "Tap a number below to make your guess:"
     )
@@ -549,11 +521,9 @@ async def handle_solo_guess_check(callback: CallbackQuery) -> None:
     if result == "correct":
         await callback.answer("🎉 Correct! You won!", show_alert=True)
         win_text = (
-            f"🎉 <b>BULLSEYE!</b>\n"
-            "━━━━━━━━━━━━━━━━━━━\n"
-            f"The secret number was <b>{target}</b>!\n"
-            f"You cracked it in <b>{attempts}</b> attempt(s)! 🏆\n"
-            "━━━━━━━━━━━━━━━━━━━\n"
+            f"🎉 <b>Correct!</b>\n\n"
+            f"The secret number was <b>{target}</b>.\n"
+            f"You cracked it in <b>{attempts}</b> attempt(s)! 🏆\n\n"
             "Play again or choose another game:"
         )
         win_kb = get_games_menu_keyboard(is_in_chat=False)
@@ -564,10 +534,9 @@ async def handle_solo_guess_check(callback: CallbackQuery) -> None:
     elif result == "higher":
         await callback.answer(f"⬆️ Secret number is HIGHER than {guess_digit}!", show_alert=False)
         high_text = (
-            f"🔢 <b>Guess the Number (0–9)</b>\n"
-            "━━━━━━━━━━━━━━━━━━━\n"
-            f"Your guess: <b>{guess_digit}</b> (Too low! ⬆️)\n"
-            f"Attempts so far: <b>{attempts}</b>\n\n"
+            f"🔢 <b>Guess the Number (0–9)</b>\n\n"
+            f"• Guess: <b>{guess_digit}</b> (Too low! ⬆️)\n"
+            f"• Attempts: <b>{attempts}</b>\n\n"
             "Try another digit below:"
         )
         high_kb = get_number_guess_keyboard(prefix="cb_solo_guess")
@@ -578,10 +547,9 @@ async def handle_solo_guess_check(callback: CallbackQuery) -> None:
     else:  # lower
         await callback.answer(f"⬇️ Secret number is LOWER than {guess_digit}!", show_alert=False)
         low_text = (
-            f"🔢 <b>Guess the Number (0–9)</b>\n"
-            "━━━━━━━━━━━━━━━━━━━\n"
-            f"Your guess: <b>{guess_digit}</b> (Too high! ⬇️)\n"
-            f"Attempts so far: <b>{attempts}</b>\n\n"
+            f"🔢 <b>Guess the Number (0–9)</b>\n\n"
+            f"• Guess: <b>{guess_digit}</b> (Too high! ⬇️)\n"
+            f"• Attempts: <b>{attempts}</b>\n\n"
             "Try another digit below:"
         )
         low_kb = get_number_guess_keyboard(prefix="cb_solo_guess")
@@ -601,10 +569,8 @@ async def handle_solo_math_start(callback: CallbackQuery) -> None:
 
     puzzle = solo_games.start_math(callback.from_user.id)
     math_text = (
-        f"🧮 <b>Math Speed Puzzle</b>\n"
-        "━━━━━━━━━━━━━━━━━━━\n"
-        f"Solve: <b>{puzzle.question}</b>\n"
-        "━━━━━━━━━━━━━━━━━━━\n"
+        f"🧮 <b>Math Speed Puzzle</b>\n\n"
+        f"Solve: <b>{puzzle.question}</b>\n\n"
         "Select the correct answer:"
     )
     math_kb = get_math_puzzle_keyboard(puzzle.options, prefix="cb_solo_math")
@@ -625,7 +591,7 @@ async def handle_solo_math_check(callback: CallbackQuery) -> None:
 
     if is_correct:
         await callback.answer("🌟 Correct answer!", show_alert=False)
-        status_text = f"✅ <b>Brilliant!</b> <b>{chosen_ans}</b> is correct! 🌟"
+        status_text = f"✅ <b>Correct!</b> <b>{chosen_ans}</b> is right! 🌟"
     else:
         await callback.answer(f"❌ Incorrect! Correct was {answer}", show_alert=False)
         status_text = f"❌ <b>Not quite!</b> Correct answer was <b>{answer}</b>."
@@ -637,10 +603,8 @@ async def handle_solo_math_check(callback: CallbackQuery) -> None:
         ]
     )
     math_res_text = (
-        f"🧮 <b>Math Puzzle Result</b>\n"
-        "━━━━━━━━━━━━━━━━━━━\n"
-        f"{status_text}\n"
-        "━━━━━━━━━━━━━━━━━━━\n"
+        f"🧮 <b>Math Puzzle Result</b>\n\n"
+        f"{status_text}\n\n"
         "Ready for another one?"
     )
     try:
@@ -658,8 +622,7 @@ async def handle_solo_rps_start(callback: CallbackQuery) -> None:
         return
 
     rps_text = (
-        "✊ <b>Rock-Paper-Scissors (vs Bot)</b>\n"
-        "━━━━━━━━━━━━━━━━━━━\n"
+        "✊ <b>Rock-Paper-Scissors (vs Bot)</b>\n\n"
         "Choose your move:"
     )
     rps_kb = get_rps_keyboard(prefix="cb_solo_rps")
@@ -686,9 +649,9 @@ async def handle_solo_rps_play(callback: CallbackQuery) -> None:
     if outcome == "win":
         res_text = "🎉 <b>YOU WIN!</b> 🏆"
     elif outcome == "lose":
-        res_text = "🤖 <b>BOT WINS!</b> Better luck next time!"
+        res_text = "🤖 <b>BOT WINS!</b>"
     else:
-        res_text = "🤝 <b>IT'S A TIE!</b> Great minds think alike."
+        res_text = "🤝 <b>IT'S A TIE!</b>"
 
     again_kb = InlineKeyboardMarkup(
         inline_keyboard=[
@@ -697,11 +660,9 @@ async def handle_solo_rps_play(callback: CallbackQuery) -> None:
         ]
     )
     result_text = (
-        f"✊ <b>Rock-Paper-Scissors Match</b> (Round #{round_id})\n"
-        "━━━━━━━━━━━━━━━━━━━\n"
-        f"👤 <b>Your Move:</b> {u_emoji}\n"
-        f"🤖 <b>Bot's Move:</b> {b_emoji}\n"
-        "━━━━━━━━━━━━━━━━━━━\n"
+        f"✊ <b>Rock-Paper-Scissors</b> (#{round_id})\n\n"
+        f"• <b>You:</b> {u_emoji}\n"
+        f"• <b>Bot:</b> {b_emoji}\n\n"
         f"{res_text}"
     )
     try:
@@ -737,11 +698,9 @@ async def handle_solo_dice(callback: CallbackQuery) -> None:
         ]
     )
     result_text = (
-        f"🎲 <b>Lucky Dice Roll</b> (Roll #{roll_id})\n"
-        "━━━━━━━━━━━━━━━━━━━\n"
-        f"👤 <b>You rolled:</b> 🎲 <b>{u_roll}</b>\n"
-        f"🤖 <b>Bot rolled:</b> 🎲 <b>{b_roll}</b>\n"
-        "━━━━━━━━━━━━━━━━━━━\n"
+        f"🎲 <b>Lucky Dice Roll</b> (#{roll_id})\n\n"
+        f"• <b>You rolled:</b> 🎲 {u_roll}\n"
+        f"• <b>Bot rolled:</b> 🎲 {b_roll}\n\n"
         f"{res}"
     )
     try:
@@ -794,23 +753,17 @@ async def handle_duel_math_start(callback: CallbackQuery) -> None:
     await callback.answer("⚡ Math duel started!")
 
     duel_text = (
-        "⚡ <b>MATH SPEED DUEL!</b>\n"
-        "━━━━━━━━━━━━━━━━━━━\n"
+        "⚡ <b>Math Speed Duel</b>\n\n"
         "Solve as fast as you can:\n\n"
-        f"👉 <b>{puzzle.question}</b>\n"
-        "━━━━━━━━━━━━━━━━━━━\n"
-        f"🏆 <b>Session Score:</b> You <b>{my_sc}</b> ⚔️ <b>{p_sc}</b> Partner\n"
-        "━━━━━━━━━━━━━━━━━━━\n"
+        f"👉 <b>{puzzle.question}</b>\n\n"
+        f"🏆 <b>Score:</b> You <b>{my_sc}</b> — <b>{p_sc}</b> Partner\n"
         "Tap the correct answer:"
     )
     partner_text = (
-        "⚡ <b>MATH SPEED DUEL!</b>\n"
-        "━━━━━━━━━━━━━━━━━━━\n"
+        "⚡ <b>Math Speed Duel</b>\n\n"
         "Solve as fast as you can:\n\n"
-        f"👉 <b>{puzzle.question}</b>\n"
-        "━━━━━━━━━━━━━━━━━━━\n"
-        f"🏆 <b>Session Score:</b> You <b>{p_sc}</b> ⚔️ <b>{my_sc}</b> Partner\n"
-        "━━━━━━━━━━━━━━━━━━━\n"
+        f"👉 <b>{puzzle.question}</b>\n\n"
+        f"🏆 <b>Score:</b> You <b>{p_sc}</b> — <b>{my_sc}</b> Partner\n"
         "Tap the correct answer:"
     )
     duel_kb = get_math_puzzle_keyboard(puzzle.options, prefix="cb_duel_math")
@@ -850,32 +803,20 @@ async def handle_duel_math_answer(callback: CallbackQuery) -> None:
         duel_math_kb = get_duel_rematch_keyboard("math")
 
         my_win_card = (
-            "🏆 <b>MATH DUEL COMPLETE!</b>\n"
-            "━━━━━━━━━━━━━━━━━━━\n"
-            f"✅ <b>Correct Answer:</b> <b>{correct_ans}</b>\n"
-            "⚡ <b>Winner:</b> YOU solved it first! 🥇\n"
-            "━━━━━━━━━━━━━━━━━━━\n"
-            "📊 <b>Speed & Stats:</b>\n"
-            f"• ⏱️ Reaction Time: <b>{elapsed}s</b>\n"
-            f"• 🎯 Your Attempts: <b>{user_att}</b>\n"
-            "━━━━━━━━━━━━━━━━━━━\n"
-            f"🏆 <b>Session Score:</b> You <b>{my_sc}</b> ⚔️ <b>{p_sc}</b> Partner (Ties: {ties})\n"
-            "━━━━━━━━━━━━━━━━━━━\n"
-            "<i>Tap below to play again or choose another game:</i>"
+            "🏆 <b>Math Duel Complete!</b>\n\n"
+            f"• <b>Answer:</b> <b>{correct_ans}</b>\n"
+            "• <b>Winner:</b> YOU solved it first! 🥇\n\n"
+            f"⏱️ <b>Time:</b> {elapsed}s (Attempts: {user_att})\n"
+            f"🏆 <b>Score:</b> You <b>{my_sc}</b> — <b>{p_sc}</b> Partner (Ties: {ties})\n\n"
+            "<i>Tap below to play again:</i>"
         )
         partner_win_card = (
-            "🏆 <b>MATH DUEL COMPLETE!</b>\n"
-            "━━━━━━━━━━━━━━━━━━━\n"
-            f"✅ <b>Correct Answer:</b> <b>{correct_ans}</b>\n"
-            "⚡ <b>Winner:</b> Your partner solved it first! 🥇\n"
-            "━━━━━━━━━━━━━━━━━━━\n"
-            "📊 <b>Speed & Stats:</b>\n"
-            f"• ⏱️ Winner Time: <b>{elapsed}s</b>\n"
-            f"• 🎯 Winner Attempts: <b>{user_att}</b>\n"
-            "━━━━━━━━━━━━━━━━━━━\n"
-            f"🏆 <b>Session Score:</b> You <b>{p_sc}</b> ⚔️ <b>{my_sc}</b> Partner (Ties: {ties})\n"
-            "━━━━━━━━━━━━━━━━━━━\n"
-            "<i>Tap below to play again or choose another game:</i>"
+            "🏆 <b>Math Duel Complete!</b>\n\n"
+            f"• <b>Answer:</b> <b>{correct_ans}</b>\n"
+            "• <b>Winner:</b> Partner solved it first! 🥇\n\n"
+            f"⏱️ <b>Time:</b> {elapsed}s (Attempts: {user_att})\n"
+            f"🏆 <b>Score:</b> You <b>{p_sc}</b> — <b>{my_sc}</b> Partner (Ties: {ties})\n\n"
+            "<i>Tap below to play again:</i>"
         )
         try:
             await callback.message.edit_text(my_win_card, reply_markup=duel_math_kb)
@@ -920,23 +861,17 @@ async def handle_duel_rps_start(callback: CallbackQuery) -> None:
     await callback.answer("✊ RPS duel started!")
 
     rps_duel_text = (
-        "✊ <b>ROCK-PAPER-SCISSORS DUEL!</b>\n"
-        "━━━━━━━━━━━━━━━━━━━\n"
+        "✊ <b>Rock-Paper-Scissors Duel</b>\n\n"
         "Choose your secret move below.\n"
-        "<i>Moves remain hidden until both players choose!</i>\n"
-        "━━━━━━━━━━━━━━━━━━━\n"
-        f"🏆 <b>Session Score:</b> You <b>{my_sc}</b> ⚔️ <b>{p_sc}</b> Partner\n"
-        "━━━━━━━━━━━━━━━━━━━\n"
+        "<i>Moves are revealed once both players pick!</i>\n\n"
+        f"🏆 <b>Score:</b> You <b>{my_sc}</b> — <b>{p_sc}</b> Partner\n\n"
         "👇 Tap your move:"
     )
     partner_rps_text = (
-        "✊ <b>ROCK-PAPER-SCISSORS DUEL!</b>\n"
-        "━━━━━━━━━━━━━━━━━━━\n"
+        "✊ <b>Rock-Paper-Scissors Duel</b>\n\n"
         "Choose your secret move below.\n"
-        "<i>Moves remain hidden until both players choose!</i>\n"
-        "━━━━━━━━━━━━━━━━━━━\n"
-        f"🏆 <b>Session Score:</b> You <b>{p_sc}</b> ⚔️ <b>{my_sc}</b> Partner\n"
-        "━━━━━━━━━━━━━━━━━━━\n"
+        "<i>Moves are revealed once both players pick!</i>\n\n"
+        f"🏆 <b>Score:</b> You <b>{p_sc}</b> — <b>{my_sc}</b> Partner\n\n"
         "👇 Tap your move:"
     )
     rps_kb = get_rps_keyboard(prefix="cb_duel_rps")
@@ -976,11 +911,9 @@ async def handle_duel_rps_move(callback: CallbackQuery) -> None:
         await callback.answer(f"Locked in {move_emoji}!", show_alert=False)
         try:
             await callback.message.edit_text(
-                f"✊ <b>RPS MOVE LOCKED:</b> {move_emoji}\n"
-                "━━━━━━━━━━━━━━━━━━━\n"
-                "⏳ <b>Status:</b> Waiting for your partner to choose...\n"
-                "━━━━━━━━━━━━━━━━━━━\n"
-                "<i>Moves will be revealed together as soon as partner picks!</i>"
+                f"✊ <b>Move Locked:</b> {move_emoji}\n\n"
+                "⏳ <i>Waiting for partner to choose...</i>\n\n"
+                "<i>Moves will be revealed together!</i>"
             )
         except Exception:
             pass
@@ -990,9 +923,8 @@ async def handle_duel_rps_move(callback: CallbackQuery) -> None:
             await callback.bot.send_message(
                 chat_id=partner_id,
                 text=(
-                    "⚡ <b>Your partner has LOCKED IN their move!</b>\n"
-                    "━━━━━━━━━━━━━━━━━━━\n"
-                    "👉 Quick! Pick your move below to reveal the showdown:"
+                    "⚡ <b>Partner has locked in their move!</b>\n\n"
+                    "👉 Tap your move below to reveal showdown:"
                 ),
                 reply_markup=nudge_kb,
             )
@@ -1033,30 +965,22 @@ async def handle_duel_rps_move(callback: CallbackQuery) -> None:
     duel_rps_kb = get_duel_rematch_keyboard("rps")
 
     my_card = (
-        "✊ <b>RPS SHOWDOWN RESULTS!</b>\n"
-        "━━━━━━━━━━━━━━━━━━━\n"
-        f"👤 <b>Your Move:</b> {my_m_name}\n"
-        f"👥 <b>Partner Move:</b> {p_m_name}\n"
-        "━━━━━━━━━━━━━━━━━━━\n"
+        "✊ <b>RPS Showdown</b>\n\n"
+        f"• <b>You:</b> {my_m_name}\n"
+        f"• <b>Partner:</b> {p_m_name}\n\n"
         f"{clash_desc}\n"
-        f"{outcome_me}\n"
-        "━━━━━━━━━━━━━━━━━━━\n"
-        f"🏆 <b>Session Score:</b> You <b>{my_sc}</b> ⚔️ <b>{p_sc}</b> Partner (Ties: {ties})\n"
-        "━━━━━━━━━━━━━━━━━━━\n"
-        "<i>Tap below for a rematch or choose another game:</i>"
+        f"{outcome_me}\n\n"
+        f"🏆 <b>Score:</b> You <b>{my_sc}</b> — <b>{p_sc}</b> Partner (Ties: {ties})\n\n"
+        "<i>Tap below for a rematch:</i>"
     )
     partner_card = (
-        "✊ <b>RPS SHOWDOWN RESULTS!</b>\n"
-        "━━━━━━━━━━━━━━━━━━━\n"
-        f"👤 <b>Your Move:</b> {p_m_name}\n"
-        f"👥 <b>Partner Move:</b> {my_m_name}\n"
-        "━━━━━━━━━━━━━━━━━━━\n"
+        "✊ <b>RPS Showdown</b>\n\n"
+        f"• <b>You:</b> {p_m_name}\n"
+        f"• <b>Partner:</b> {my_m_name}\n\n"
         f"{clash_desc}\n"
-        f"{outcome_partner}\n"
-        "━━━━━━━━━━━━━━━━━━━\n"
-        f"🏆 <b>Session Score:</b> You <b>{p_sc}</b> ⚔️ <b>{my_sc}</b> Partner (Ties: {ties})\n"
-        "━━━━━━━━━━━━━━━━━━━\n"
-        "<i>Tap below for a rematch or choose another game:</i>"
+        f"{outcome_partner}\n\n"
+        f"🏆 <b>Score:</b> You <b>{p_sc}</b> — <b>{my_sc}</b> Partner (Ties: {ties})\n\n"
+        "<i>Tap below for a rematch:</i>"
     )
 
     await callback.answer("Showdown complete!", show_alert=False)
@@ -1089,25 +1013,17 @@ async def handle_duel_guess_start(callback: CallbackQuery) -> None:
     await callback.answer("🔢 Number race started!")
 
     guess_duel_text = (
-        "🔢 <b>NUMBER GUESS RACE (0–9)!</b>\n"
-        "━━━━━━━━━━━━━━━━━━━\n"
+        "🔢 <b>Number Guess Race (0–9)</b>\n\n"
         "A secret digit from <b>0</b> to <b>9</b> has been chosen.\n"
-        "⚡ <b>First person to guess the exact number wins!</b>\n"
-        "━━━━━━━━━━━━━━━━━━━\n"
-        "📊 <b>Attempts:</b> You: 0 | Partner: 0\n"
-        f"🏆 <b>Session Score:</b> You <b>{my_sc}</b> ⚔️ <b>{p_sc}</b> Partner\n"
-        "━━━━━━━━━━━━━━━━━━━\n"
+        "⚡ <b>First person to guess it wins!</b>\n\n"
+        f"🏆 <b>Score:</b> You <b>{my_sc}</b> — <b>{p_sc}</b> Partner\n\n"
         "👇 Tap your guess below:"
     )
     partner_guess_text = (
-        "🔢 <b>NUMBER GUESS RACE (0–9)!</b>\n"
-        "━━━━━━━━━━━━━━━━━━━\n"
+        "🔢 <b>Number Guess Race (0–9)</b>\n\n"
         "A secret digit from <b>0</b> to <b>9</b> has been chosen.\n"
-        "⚡ <b>First person to guess the exact number wins!</b>\n"
-        "━━━━━━━━━━━━━━━━━━━\n"
-        "📊 <b>Attempts:</b> You: 0 | Partner: 0\n"
-        f"🏆 <b>Session Score:</b> You <b>{p_sc}</b> ⚔️ <b>{my_sc}</b> Partner\n"
-        "━━━━━━━━━━━━━━━━━━━\n"
+        "⚡ <b>First person to guess it wins!</b>\n\n"
+        f"🏆 <b>Score:</b> You <b>{p_sc}</b> — <b>{my_sc}</b> Partner\n\n"
         "👇 Tap your guess below:"
     )
     guess_kb = get_number_guess_keyboard(prefix="cb_duel_guess")
@@ -1147,34 +1063,22 @@ async def handle_duel_guess_check(callback: CallbackQuery) -> None:
         duel_guess_kb = get_duel_rematch_keyboard("guess")
 
         my_win_msg = (
-            "🎉 <b>BULLSEYE! YOU WON THE RACE!</b> 🥇\n"
-            "━━━━━━━━━━━━━━━━━━━\n"
+            "🎉 <b>Race Won!</b> 🥇\n\n"
             f"🎯 <b>Secret Number:</b> <b>{target}</b>\n"
-            "⚡ <b>Winner:</b> YOU guessed it first!\n"
-            "━━━━━━━━━━━━━━━━━━━\n"
-            "📊 <b>Duel Stats:</b>\n"
-            f"• 🎯 Your Attempts: <b>{my_att}</b>\n"
-            f"• 👥 Partner Attempts: <b>{p_att}</b>\n"
-            f"• ⏱️ Elapsed Time: <b>{elapsed}s</b>\n"
-            "━━━━━━━━━━━━━━━━━━━\n"
-            f"🏆 <b>Session Score:</b> You <b>{my_sc}</b> ⚔️ <b>{p_sc}</b> Partner (Ties: {ties})\n"
-            "━━━━━━━━━━━━━━━━━━━\n"
-            "<i>Ready for another round? Tap below!</i>"
+            "⚡ YOU guessed it first!\n\n"
+            f"• Attempts: You <b>{my_att}</b> | Partner <b>{p_att}</b>\n"
+            f"• Time: <b>{elapsed}s</b>\n"
+            f"🏆 <b>Score:</b> You <b>{my_sc}</b> — <b>{p_sc}</b> Partner (Ties: {ties})\n\n"
+            "<i>Tap below to play again:</i>"
         )
         their_win_msg = (
-            "🏁 <b>RACE OVER!</b>\n"
-            "━━━━━━━━━━━━━━━━━━━\n"
+            "🏁 <b>Race Over!</b>\n\n"
             f"🎯 <b>Secret Number:</b> <b>{target}</b>\n"
-            "⚡ <b>Winner:</b> Your partner guessed it first! 🥇\n"
-            "━━━━━━━━━━━━━━━━━━━\n"
-            "📊 <b>Duel Stats:</b>\n"
-            f"• 👥 Winner Attempts: <b>{my_att}</b>\n"
-            f"• 🎯 Your Attempts: <b>{p_att}</b>\n"
-            f"• ⏱️ Elapsed Time: <b>{elapsed}s</b>\n"
-            "━━━━━━━━━━━━━━━━━━━\n"
-            f"🏆 <b>Session Score:</b> You <b>{p_sc}</b> ⚔️ <b>{my_sc}</b> Partner (Ties: {ties})\n"
-            "━━━━━━━━━━━━━━━━━━━\n"
-            "<i>Ready for another round? Tap below!</i>"
+            "⚡ Your partner guessed it first! 🥇\n\n"
+            f"• Attempts: Winner <b>{my_att}</b> | You <b>{p_att}</b>\n"
+            f"• Time: <b>{elapsed}s</b>\n"
+            f"🏆 <b>Score:</b> You <b>{p_sc}</b> — <b>{my_sc}</b> Partner (Ties: {ties})\n\n"
+            "<i>Tap below to play again:</i>"
         )
         try:
             await callback.message.edit_text(my_win_msg, reply_markup=duel_guess_kb)
@@ -1193,13 +1097,10 @@ async def handle_duel_guess_check(callback: CallbackQuery) -> None:
 
         updated_kb = get_number_guess_keyboard(prefix="cb_duel_guess")
         my_status_text = (
-            "🔢 <b>NUMBER GUESS RACE (0–9)!</b>\n"
-            "━━━━━━━━━━━━━━━━━━━\n"
-            f"❌ Your guess <b>{guess_digit}</b> was too {'low' if status == 'higher' else 'high'}! (Go <b>{direction}</b>)\n"
-            "━━━━━━━━━━━━━━━━━━━\n"
-            f"📊 <b>Attempts:</b> You: <b>{my_att}</b> | Partner: <b>{p_att}</b>\n"
-            f"🏆 <b>Session Score:</b> You <b>{my_sc}</b> ⚔️ <b>{p_sc}</b> Partner\n"
-            "━━━━━━━━━━━━━━━━━━━\n"
+            "🔢 <b>Number Guess Race (0–9)</b>\n\n"
+            f"❌ <b>{guess_digit}</b> is too {'low' if status == 'higher' else 'high'}! (Go <b>{direction}</b>)\n"
+            f"• Attempts: You <b>{my_att}</b> | Partner <b>{p_att}</b>\n"
+            f"🏆 <b>Score:</b> You <b>{my_sc}</b> — <b>{p_sc}</b> Partner\n\n"
             "👇 Tap your next guess:"
         )
         try:
@@ -1243,24 +1144,17 @@ async def handle_duel_dice(callback: CallbackQuery) -> None:
     await callback.answer(f"🎲 You rolled a {starter_roll}!")
 
     starter_text = (
-        "🎲 <b>LUCKY DICE DUEL!</b>\n"
-        "━━━━━━━━━━━━━━━━━━━\n"
-        f"🎯 <b>Your Roll:</b> 🎲 <b>{starter_roll}</b>\n"
-        "⏳ <b>Status:</b> Waiting for partner to roll challenge dice...\n"
-        "━━━━━━━━━━━━━━━━━━━\n"
-        f"🏆 <b>Session Score:</b> You <b>{my_sc}</b> ⚔️ <b>{p_sc}</b> Partner\n"
-        "━━━━━━━━━━━━━━━━━━━\n"
-        "<i>Your partner was sent a challenge roll button!</i>"
+        "🎲 <b>Lucky Dice Duel</b>\n\n"
+        f"• <b>Your Roll:</b> 🎲 <b>{starter_roll}</b>\n"
+        "⏳ <i>Waiting for partner to roll challenge dice...</i>\n\n"
+        f"🏆 <b>Score:</b> You <b>{my_sc}</b> — <b>{p_sc}</b> Partner"
     )
     partner_challenge_text = (
-        "🎲 <b>DICE DUEL CHALLENGE!</b>\n"
-        "━━━━━━━━━━━━━━━━━━━\n"
-        f"👤 <b>Your partner rolled:</b> 🎲 <b>{starter_roll}</b>\n"
-        "⚡ <b>Can you roll higher and win?</b>\n"
-        "━━━━━━━━━━━━━━━━━━━\n"
-        f"🏆 <b>Session Score:</b> You <b>{p_sc}</b> ⚔️ <b>{my_sc}</b> Partner\n"
-        "━━━━━━━━━━━━━━━━━━━\n"
-        "👇 Tap below to roll your challenge dice:"
+        "🎲 <b>Dice Duel Challenge!</b>\n\n"
+        f"• <b>Partner rolled:</b> 🎲 <b>{starter_roll}</b>\n"
+        "⚡ <i>Can you roll higher and win?</i>\n\n"
+        f"🏆 <b>Score:</b> You <b>{p_sc}</b> — <b>{my_sc}</b> Partner\n\n"
+        "👇 Tap below to roll your dice:"
     )
     challenge_kb = get_dice_challenge_keyboard()
 
@@ -1315,28 +1209,20 @@ async def handle_duel_dice_roll(callback: CallbackQuery) -> None:
         clash_outcome_partner = f"🏆 <b>YOU WON!</b> ({starter_roll} beats {challenger_roll}) 🥇"
 
     my_card = (
-        "🎲 <b>DICE DUEL SHOWDOWN!</b>\n"
-        "━━━━━━━━━━━━━━━━━━━\n"
-        f"👤 <b>Your Roll:</b> 🎲 <b>{challenger_roll}</b>\n"
-        f"👥 <b>Partner Roll:</b> 🎲 <b>{starter_roll}</b>\n"
-        "━━━━━━━━━━━━━━━━━━━\n"
-        f"{clash_outcome_me}\n"
-        "━━━━━━━━━━━━━━━━━━━\n"
-        f"🏆 <b>Session Score:</b> You <b>{my_sc}</b> ⚔️ <b>{p_sc}</b> Partner (Ties: {ties})\n"
-        "━━━━━━━━━━━━━━━━━━━\n"
-        "<i>Tap below to roll again or choose another game:</i>"
+        "🎲 <b>Dice Duel Showdown</b>\n\n"
+        f"• <b>Your Roll:</b> 🎲 <b>{challenger_roll}</b>\n"
+        f"• <b>Partner Roll:</b> 🎲 <b>{starter_roll}</b>\n\n"
+        f"{clash_outcome_me}\n\n"
+        f"🏆 <b>Score:</b> You <b>{my_sc}</b> — <b>{p_sc}</b> Partner (Ties: {ties})\n\n"
+        "<i>Tap below to roll again:</i>"
     )
     partner_card = (
-        "🎲 <b>DICE DUEL SHOWDOWN!</b>\n"
-        "━━━━━━━━━━━━━━━━━━━\n"
-        f"👤 <b>Your Roll:</b> 🎲 <b>{starter_roll}</b>\n"
-        f"👥 <b>Partner Roll:</b> 🎲 <b>{challenger_roll}</b>\n"
-        "━━━━━━━━━━━━━━━━━━━\n"
-        f"{clash_outcome_partner}\n"
-        "━━━━━━━━━━━━━━━━━━━\n"
-        f"🏆 <b>Session Score:</b> You <b>{p_sc}</b> ⚔️ <b>{my_sc}</b> Partner (Ties: {ties})\n"
-        "━━━━━━━━━━━━━━━━━━━\n"
-        "<i>Tap below to roll again or choose another game:</i>"
+        "🎲 <b>Dice Duel Showdown</b>\n\n"
+        f"• <b>Your Roll:</b> 🎲 <b>{starter_roll}</b>\n"
+        f"• <b>Partner Roll:</b> 🎲 <b>{challenger_roll}</b>\n\n"
+        f"{clash_outcome_partner}\n\n"
+        f"🏆 <b>Score:</b> You <b>{p_sc}</b> — <b>{my_sc}</b> Partner (Ties: {ties})\n\n"
+        "<i>Tap below to roll again:</i>"
     )
 
     try:
@@ -1364,10 +1250,8 @@ async def handle_gender_command(message: Message) -> None:
 
     current_gender = format_gender_display(db_user.get("gender"))
     await message.answer(
-        f"👤 <b>Gender Preference</b>\n"
-        "━━━━━━━━━━━━━━━━━━━\n"
-        f"Current selection: <b>{current_gender}</b>\n"
-        "━━━━━━━━━━━━━━━━━━━\n"
+        f"👤 <b>Gender Preference</b>\n\n"
+        f"Current selection: <b>{current_gender}</b>\n\n"
         "Select an option below to update:",
         reply_markup=get_gender_keyboard(),
     )
@@ -1409,8 +1293,7 @@ async def handle_gender_callback(callback: CallbackQuery) -> None:
     if current_age not in ("below_18", "18-25", "25-35", "40+"):
         try:
             await callback.message.edit_text(
-                f"✅ <b>Gender set to {gender_badge}!</b>\n"
-                "━━━━━━━━━━━━━━━━━━━\n"
+                f"✅ <b>Gender set to {gender_badge}!</b>\n\n"
                 "🎂 <b>Now, please select your age range:</b>\n"
                 "This helps your partner know who they are chatting with.",
                 reply_markup=get_age_keyboard(),
@@ -1420,8 +1303,7 @@ async def handle_gender_callback(callback: CallbackQuery) -> None:
     else:
         try:
             await callback.message.edit_text(
-                f"✅ <b>Gender set to {gender_badge}!</b>\n"
-                "━━━━━━━━━━━━━━━━━━━\n"
+                f"✅ <b>Gender set to {gender_badge}!</b>\n\n"
                 "You are all set to chat anonymously.\n\n"
                 "👉 Tap <b>🔍 Find Stranger</b> below to start searching!\n"
                 "👉 Tap <b>/gender</b> or <b>/age</b> to update your preferences.",
@@ -1445,10 +1327,8 @@ async def handle_age_command(message: Message) -> None:
 
     current_age = format_age_display(db_user.get("age_range"))
     await message.answer(
-        f"🎂 <b>Age Range Selection</b>\n"
-        "━━━━━━━━━━━━━━━━━━━\n"
-        f"Current selection: <b>{current_age}</b>\n"
-        "━━━━━━━━━━━━━━━━━━━\n"
+        f"🎂 <b>Age Range Selection</b>\n\n"
+        f"Current selection: <b>{current_age}</b>\n\n"
         "Select your age bracket below:",
         reply_markup=get_age_keyboard(),
     )
@@ -1484,8 +1364,7 @@ async def handle_age_callback(callback: CallbackQuery) -> None:
 
     try:
         await callback.message.edit_text(
-            f"✅ <b>Age range set to {age_badge}!</b>\n"
-            "━━━━━━━━━━━━━━━━━━━\n"
+            f"✅ <b>Age range set to {age_badge}!</b>\n\n"
             "Your anonymous profile is complete.\n\n"
             "👉 Tap <b>🔍 Find Stranger</b> below to start chatting!",
             reply_markup=get_profile_keyboard(),
@@ -1505,7 +1384,7 @@ async def handle_start_find_callback(callback: CallbackQuery) -> None:
 
 
 @router.message(Command("find"))
-@router.message(F.text == "🔍 Find Stranger")
+@router.message(F.text.in_({"🔍 Find Stranger", "🔍 Find a Stranger", "🔍 Start Chatting", "🔍 Find Next"}))
 async def handle_find_command(message: Message) -> None:
     """Handles /find command or 'Find Stranger' button."""
     from_user = message.from_user
@@ -1529,8 +1408,8 @@ async def execute_find_flow(message: Message, from_user) -> None:
     if active_session:
         await message.answer(
             "💬 <b>You are already chatting with someone!</b>\n\n"
-            "• Tap <b>⏭️ Next Stranger</b> to skip\n"
-            "• Tap <b>⏹️ End Chat</b> to leave",
+            "• Tap <b>⏭️ Next</b> to skip\n"
+            "• Tap <b>⏹️ End</b> to leave",
             reply_markup=get_chat_reply_keyboard(),
         )
         return
@@ -1538,8 +1417,7 @@ async def execute_find_flow(message: Message, from_user) -> None:
     gender = db_user.get("gender", "unknown")
     if gender not in ("male", "female", "prefer_not_to_say"):
         await message.answer(
-            "⚠️ <b>Gender Selection Required</b>\n"
-            "━━━━━━━━━━━━━━━━━━━\n"
+            "⚠️ <b>Gender Selection Required</b>\n\n"
             "Please select your gender preference before searching:",
             reply_markup=get_gender_keyboard(),
         )
@@ -1548,8 +1426,7 @@ async def execute_find_flow(message: Message, from_user) -> None:
     age_range = db_user.get("age_range", "unknown")
     if age_range not in ("below_18", "18-25", "25-35", "40+"):
         await message.answer(
-            "🎂 <b>Age Range Required</b>\n"
-            "━━━━━━━━━━━━━━━━━━━\n"
+            "🎂 <b>Age Range Required</b>\n\n"
             "Please select your age bracket before searching:",
             reply_markup=get_age_keyboard(),
         )
@@ -1558,8 +1435,7 @@ async def execute_find_flow(message: Message, from_user) -> None:
     # Check if already waiting in queue
     if await match_queue.is_in_queue(tg_id):
         await message.answer(
-            "⏳ <b>Already Searching!</b>\n"
-            "━━━━━━━━━━━━━━━━━━━\n"
+            "⏳ <b>Already Searching!</b>\n\n"
             "You are currently in line waiting for a match. Please wait a moment or tap Cancel below:",
             reply_markup=get_search_keyboard(),
         )
@@ -1604,17 +1480,15 @@ async def execute_find_flow(message: Message, from_user) -> None:
             else "\n\n💡 <i>Tip: VIP members get priority in the queue! Type /invite to share with friends.</i>"
         )
         await message.answer(
-            f"🔍 <b>Searching for a partner...</b>{vip_tag}\n"
-            "━━━━━━━━━━━━━━━━━━━\n"
-            f"Looking for an opposite-gender stranger (or any waiting stranger).{tip}\n"
-            "━━━━━━━━━━━━━━━━━━━\n"
+            f"🔍 <b>Searching for a partner...</b>{vip_tag}\n\n"
+            f"Looking for an opposite-gender stranger (or any waiting stranger).{tip}\n\n"
             "Please wait, or tap below to cancel search:",
             reply_markup=get_search_keyboard(),
         )
 
 
 @router.message(Command("next"))
-@router.message(F.text == "⏭️ Next Stranger")
+@router.message(F.text.in_({"⏭️ Next", "⏭️ Next Stranger"}))
 async def handle_next_command(message: Message) -> None:
     """
     Handles /next command:
@@ -1705,15 +1579,14 @@ async def handle_next_command(message: Message) -> None:
     else:
         vip_tag = " ⭐ <i>(VIP Priority)</i>" if is_premium else ""
         await message.answer(
-            f"🔍 <b>Searching for a new stranger...</b>{vip_tag}\n"
-            "━━━━━━━━━━━━━━━━━━━\n"
+            f"🔍 <b>Searching for a new stranger...</b>{vip_tag}\n\n"
             "Looking for a match. Please wait a moment...",
             reply_markup=get_search_keyboard(),
         )
 
 
 @router.message(Command("stop"))
-@router.message(F.text == "⏹️ End Chat")
+@router.message(F.text.in_({"⏹️ End", "⏹️ End Chat"}))
 async def handle_stop_command(message: Message) -> None:
     """
     Handles /stop command:
@@ -1748,11 +1621,9 @@ async def handle_stop_command(message: Message) -> None:
 
         await match_queue.remove_user(tg_id)
         await message.answer(
-            "⏹️ <b>Chat ended.</b>\n"
-            "━━━━━━━━━━━━━━━━━━━\n"
+            "⏹️ <b>Chat ended.</b>\n\n"
             "✨ <b>Thought of the Moment:</b>\n"
-            f"<i>{get_random_motivational_quote()}</i>\n"
-            "━━━━━━━━━━━━━━━━━━━\n"
+            f"<i>{get_random_motivational_quote()}</i>\n\n"
             "Where would you like to go next?",
             reply_markup=get_partner_disconnected_keyboard(),
         )
@@ -1761,8 +1632,7 @@ async def handle_stop_command(message: Message) -> None:
     removed_from_queue = await match_queue.remove_user(tg_id)
     if removed_from_queue:
         await message.answer(
-            "❌ <b>Search Cancelled</b>\n"
-            "━━━━━━━━━━━━━━━━━━━\n"
+            "❌ <b>Search Cancelled</b>\n\n"
             "You have been removed from the matchmaking queue.\n"
             "Tap <b>🔍 Find Stranger</b> whenever you wish to search again!",
             reply_markup=get_idle_reply_keyboard(),
@@ -1785,7 +1655,7 @@ REPORT_REASONS = {
 
 
 @router.message(Command("report"))
-@router.message(F.text == "🚨 Report User")
+@router.message(F.text.in_({"🚨 Report", "🚨 Report User"}))
 async def handle_report_command(message: Message) -> None:
     """
     Handles /report command:
@@ -1856,8 +1726,7 @@ async def handle_report_reason_chosen(callback: CallbackQuery) -> None:
 
     # Feedback to reporter
     reporter_text = (
-        "🚨 <b>User Reported & Chat Ended</b>\n"
-        "━━━━━━━━━━━━━━━━━━━\n"
+        "🚨 <b>User Reported & Chat Ended</b>\n\n"
         f"<b>Reason:</b> {reason_label}\n"
         "Thank you for helping keep Stranger Chat safe. A moderation strike was recorded.\n\n"
         "👉 Tap <b>🔍 Find Stranger</b> to connect with someone new!"
@@ -1900,8 +1769,7 @@ async def handle_cancel_search_callback(callback: CallbackQuery) -> None:
         await callback.answer("Search cancelled.")
         try:
             await callback.message.edit_text(
-                "❌ <b>Search Cancelled</b>\n"
-                "━━━━━━━━━━━━━━━━━━━\n"
+                "❌ <b>Search Cancelled</b>\n\n"
                 "You have been removed from the matchmaking queue.\n"
                 "Tap <b>🔍 Find Stranger</b> below whenever you are ready!",
             )

@@ -40,13 +40,10 @@ def get_random_motivational_quote() -> str:
 
 
 def get_partner_ended_text() -> str:
-    """Generates the card when a chat partner disconnects."""
+    """Generates the clean card when a chat partner disconnects."""
     quote = get_random_motivational_quote()
     return (
-        "👋 <b>Your chat partner has ended the chat.</b>\n"
-        "━━━━━━━━━━━━━━━━━━━\n"
-        "✨ <b>Thought of the Moment:</b>\n"
-        f"<i>{quote}</i>\n"
-        "━━━━━━━━━━━━━━━━━━━\n"
-        "Where would you like to go next?"
+        "👋 <b>Chat ended by partner.</b>\n\n"
+        f"✨ <i>{quote}</i>\n\n"
+        "Ready to meet someone new?"
     )

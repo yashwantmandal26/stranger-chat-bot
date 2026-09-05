@@ -44,11 +44,9 @@ async def run_inactivity_checker(
 
                 quote = get_random_motivational_quote()
                 inactivity_notice = (
-                    "⏳ <b>Chat closed due to inactivity.</b>\n"
-                    "━━━━━━━━━━━━━━━━━━━\n"
+                    "⏳ <b>Chat closed due to inactivity.</b>\n\n"
                     "✨ <b>Thought of the Moment:</b>\n"
-                    f"<i>{quote}</i>\n"
-                    "━━━━━━━━━━━━━━━━━━━\n"
+                    f"<i>{quote}</i>\n\n"
                     "Where would you like to go next?"
                 )
 
