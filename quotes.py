@@ -80,8 +80,7 @@ def get_partner_ended_text(duration: Optional[str] = None) -> str:
     return (
         "👋 <b>Stranger has disconnected.</b>\n\n"
         f"{dur_line}"
-        "✨ <b>Thought of the Moment:</b>\n"
-        f"<i>{quote}</i>\n\n"
+        f"✨ <b>{quote}</b>\n\n"
         "Ready to meet someone new?"
     )
 
@@ -93,7 +92,6 @@ def get_user_ended_text(duration: Optional[str] = None) -> str:
     return (
         "⏹️ <b>Chat ended.</b>\n\n"
         f"{dur_line}"
-        "✨ <b>Thought of the Moment:</b>\n"
-        f"<i>{quote}</i>\n\n"
+        f"✨ <b>{quote}</b>\n\n"
         "Where would you like to go next?"
     )

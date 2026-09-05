@@ -52,8 +52,7 @@ async def run_inactivity_checker(
                 inactivity_notice = (
                     "⏳ <b>Chat closed due to inactivity.</b>\n\n"
                     f"⏱️ <b>Chat Duration:</b> <b>{dur_str}</b>\n\n"
-                    "✨ <b>Thought of the Moment:</b>\n"
-                    f"<i>{quote}</i>\n\n"
+                    f"✨ <b>{quote}</b>\n\n"
                     "Where would you like to go next?"
                 )
 
