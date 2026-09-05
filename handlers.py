@@ -1,4 +1,5 @@
 import logging
+from typing import Any
 from aiogram import F, Router
 from aiogram.exceptions import TelegramAPIError
 from aiogram.filters import Command, CommandStart
@@ -32,6 +33,26 @@ HELP_TEXT = (
 )
 
 
+async def get_or_register_user(from_user) -> tuple[dict[str, Any], bool]:
+    """
+    Retrieves user from SQLite or auto-registers them seamlessly.
+    Returns (db_user, is_banned).
+    """
+    db_user = await database.get_user(from_user.id)
+    if not db_user:
+        is_allowed, age_days, est_date = account_age.check_account_age(
+            tg_id=from_user.id,
+            min_days=config.MIN_ACCOUNT_AGE_DAYS,
+        )
+        db_user = await database.upsert_user(
+            tg_id=from_user.id,
+            username=from_user.username,
+            account_created_at=est_date.isoformat(),
+            is_banned=0 if is_allowed else 1,
+        )
+    return db_user, bool(db_user.get("is_banned"))
+
+
 @router.message(CommandStart())
 async def handle_start(message: Message) -> None:
     """
@@ -45,68 +66,20 @@ async def handle_start(message: Message) -> None:
         return
 
     tg_id = from_user.id
-    username = from_user.username
+    logger.info("Handling /start for user_id=%s (username=@%s)", tg_id, from_user.username)
 
-    logger.info("Handling /start for user_id=%s (username=@%s)", tg_id, username)
+    db_user, is_banned = await get_or_register_user(from_user)
 
-    # 1. Check if user is already recorded in the database
-    db_user = await database.get_user(tg_id)
-
-    # If already banned
-    if db_user and db_user.get("is_banned"):
+    if is_banned:
         await message.answer(
-            "⛔ <b>Access Restricted</b>\n\n"
-            "Your account is currently suspended from Stranger Chat due to safety policy violations."
+            "🛡️ <b>Account Safety Notice</b>\n\n"
+            "To maintain a safe and spam-free environment for everyone, Stranger Chat requires "
+            f"your Telegram account to be at least <b>{config.MIN_ACCOUNT_AGE_DAYS} days old</b>.\n\n"
+            "Please come back once your account reaches 30 days of age. We appreciate your understanding!"
         )
         return
 
-    # 2. If new user, verify account age
-    if not db_user:
-        is_allowed, age_days, est_date = account_age.check_account_age(
-            tg_id=tg_id,
-            min_days=config.MIN_ACCOUNT_AGE_DAYS,
-        )
-
-        if not is_allowed:
-            logger.warning(
-                "Blocked young account user_id=%s (age: %d days < %d days requirement)",
-                tg_id,
-                age_days,
-                config.MIN_ACCOUNT_AGE_DAYS,
-            )
-            await database.upsert_user(
-                tg_id=tg_id,
-                username=username,
-                account_created_at=est_date.isoformat(),
-                is_banned=1,
-            )
-            await message.answer(
-                "🛡️ <b>Account Safety Notice</b>\n\n"
-                "To maintain a safe and spam-free environment for everyone, Stranger Chat requires "
-                f"your Telegram account to be at least <b>{config.MIN_ACCOUNT_AGE_DAYS} days old</b>.\n\n"
-                f"⏳ <b>Estimated Account Age:</b> {max(0, age_days)} days\n\n"
-                "Please come back once your account reaches 30 days of age. We appreciate your understanding!"
-            )
-            return
-
-        db_user = await database.upsert_user(
-            tg_id=tg_id,
-            username=username,
-            account_created_at=est_date.isoformat(),
-            is_banned=0,
-        )
-    else:
-        # Existing non-banned user: ensure username is updated
-        _, age_days, _ = account_age.check_account_age(tg_id=tg_id)
-        if username and db_user.get("username") != username:
-            await database.upsert_user(
-                tg_id=tg_id,
-                username=username,
-                account_created_at=db_user.get("account_created_at", ""),
-                is_banned=0,
-            )
-
-    # 3. If currently in an active chat
+    # If currently in an active chat
     if await database.get_active_session(tg_id):
         await message.answer(
             "💬 <b>You are currently chatting with someone!</b>\n\n"
@@ -115,7 +88,7 @@ async def handle_start(message: Message) -> None:
         )
         return
 
-    # 4. Upgraded Welcome Greeting with rules & action buttons
+    # Upgraded Welcome Greeting with rules & action buttons
     name_display = f" <b>{from_user.first_name}</b>" if from_user.first_name else ""
     user_gender = db_user.get("gender", "unknown")
     gender_status = (
@@ -174,7 +147,6 @@ async def handle_stats_command(message: Message) -> None:
     if not from_user:
         return
 
-    # Restrict command strictly to configured ADMIN_ID
     if from_user.id != config.ADMIN_ID:
         await message.answer("⛔ Access denied. This command is restricted to administrators.")
         return
@@ -206,12 +178,12 @@ async def handle_gender_command(message: Message) -> None:
     if not from_user:
         return
 
-    db_user = await database.get_user(from_user.id)
-    if db_user and db_user.get("is_banned"):
+    db_user, is_banned = await get_or_register_user(from_user)
+    if is_banned:
         await message.answer("⛔ Your account is suspended.")
         return
 
-    current_gender = db_user.get("gender", "unknown").title() if db_user else "Not set"
+    current_gender = db_user.get("gender", "unknown").title()
     await message.answer(
         f"👤 <b>Gender Preference</b>\n\n"
         f"Current selection: <b>{current_gender}</b>\n\n"
@@ -254,8 +226,7 @@ async def handle_start_find_callback(callback: CallbackQuery) -> None:
         return
 
     await callback.answer()
-    # Trigger matching directly through the logic
-    await execute_find_flow(callback.message, callback.from_user.id)
+    await execute_find_flow(callback.message, callback.from_user)
 
 
 @router.message(Command("find"))
@@ -265,18 +236,15 @@ async def handle_find_command(message: Message) -> None:
     if not from_user:
         return
 
-    await execute_find_flow(message, from_user.id)
+    await execute_find_flow(message, from_user)
 
 
-async def execute_find_flow(message: Message, tg_id: int) -> None:
+async def execute_find_flow(message: Message, from_user) -> None:
     """Core matchmaking execution logic shared between /find and inline button."""
-    db_user = await database.get_user(tg_id)
+    tg_id = from_user.id
+    db_user, is_banned = await get_or_register_user(from_user)
 
-    if not db_user:
-        await message.answer("Please start the bot first by typing /start.")
-        return
-
-    if db_user.get("is_banned"):
+    if is_banned:
         await message.answer("⛔ Your account is suspended from Stranger Chat.")
         return
 
@@ -360,9 +328,9 @@ async def handle_next_command(message: Message) -> None:
         return
 
     tg_id = from_user.id
-    db_user = await database.get_user(tg_id)
+    db_user, is_banned = await get_or_register_user(from_user)
 
-    if not db_user or db_user.get("is_banned"):
+    if is_banned:
         await message.answer("⛔ Your account is suspended.")
         return
 
@@ -516,7 +484,6 @@ async def handle_anonymous_message(message: Message) -> None:
 
     try:
         await message.copy_to(chat_id=partner_id)
-        # Update last_activity_at timestamp to prevent inactivity timeout
         await database.update_session_activity(tg_id)
     except TelegramAPIError as e:
         logger.error(
