@@ -3,6 +3,7 @@ import json
 import logging
 from datetime import datetime, timezone
 from pathlib import Path
+import config
 
 logger = logging.getLogger(__name__)
 
@@ -92,16 +93,21 @@ def estimate_account_creation_date(tg_id: int) -> datetime:
     return datetime.fromtimestamp(est_ts, tz=timezone.utc)
 
 
-def check_account_age(tg_id: int, min_days: int = 30) -> tuple[bool, int, datetime]:
+def check_account_age(tg_id: int, min_days: int = 0) -> tuple[bool, int, datetime]:
     """
     Checks if a Telegram account is at least `min_days` old.
     Returns:
         tuple[bool, int, datetime]:
         (is_allowed, age_in_days, estimated_creation_date)
     """
+    if min_days <= 0 or tg_id == config.ADMIN_ID:
+        return True, 999, datetime.now(timezone.utc)
+
     now = datetime.now(timezone.utc)
     est_date = estimate_account_creation_date(tg_id)
-    age_days = (now - est_date).days
+    if est_date > now:
+        est_date = now
 
+    age_days = max(0, (now - est_date).days)
     is_allowed = age_days >= min_days
     return is_allowed, age_days, est_date

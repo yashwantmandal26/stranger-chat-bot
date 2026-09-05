@@ -1,3 +1,4 @@
+import html
 import logging
 import random
 from typing import Any
@@ -110,16 +111,21 @@ async def get_or_register_user(from_user) -> tuple[dict[str, Any], bool]:
             account_created_at=est_date.isoformat(),
             is_banned=0 if is_allowed else 1,
         )
+    # Admin is never banned
+    if from_user.id == config.ADMIN_ID:
+        return db_user, False
     return db_user, bool(db_user.get("is_banned"))
 
 
 @router.message(CommandStart())
+@router.message(F.text.lower().in_({"start", "/start"}))
 async def handle_start(message: Message) -> None:
     """
     Handles /start command:
-    1. Verifies Telegram account age (<30 days blocked with polite notice).
+    1. Verifies Telegram account age.
     2. Handles banned accounts.
-    3. Displays aesthetic welcome card with rules, action buttons, and persistent mobile menu.
+    3. Checks if user is in an active chat with quick restart button.
+    4. Displays aesthetic welcome card with rules, action buttons, and persistent mobile menu.
     """
     from_user = message.from_user
     if not from_user:
@@ -130,26 +136,34 @@ async def handle_start(message: Message) -> None:
 
     db_user, is_banned = await get_or_register_user(from_user)
 
-    if is_banned:
+    if is_banned and tg_id != config.ADMIN_ID:
         await message.answer(
-            "🛡️ <b>Account Safety Notice</b>\n\n"
-            "To maintain a safe and spam-free environment for everyone, Stranger Chat requires "
-            f"your Telegram account to be at least <b>{config.MIN_ACCOUNT_AGE_DAYS} days old</b>.\n\n"
-            "Please come back once your account reaches 30 days of age. We appreciate your understanding!"
+            "🛡️ <b>Account Notice</b>\n\n"
+            "Your account is restricted from matchmaking.\n"
+            "If you believe this is in error, please try again later."
         )
         return
 
-    # If currently in an active chat
+    # If currently in an active chat, offer clear choices
     if await database.get_active_session(tg_id):
+        active_kb = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    InlineKeyboardButton(text="⏹️ End Chat & Start Fresh", callback_data="cb_end_and_restart"),
+                    InlineKeyboardButton(text="⏭️ Next Stranger", callback_data="cb_start_find"),
+                ]
+            ]
+        )
         await message.answer(
             "💬 <b>You are currently chatting with someone!</b>\n\n"
-            "• Tap <b>⏭️ Next Stranger</b> to skip to a new partner.\n"
-            "• Tap <b>⏹️ End Chat</b> to leave the conversation.",
-            reply_markup=get_chat_reply_keyboard(),
+            "• Tap <b>⏹️ End Chat & Start Fresh</b> to leave and open the main menu.\n"
+            "• Tap <b>⏭️ Next Stranger</b> to skip to a new partner.",
+            reply_markup=active_kb,
         )
         return
 
-    name_display = f" <b>{from_user.first_name}</b>" if from_user.first_name else ""
+    safe_first_name = html.escape(from_user.first_name) if from_user.first_name else ""
+    name_display = f" <b>{safe_first_name}</b>" if safe_first_name else ""
     user_gender = db_user.get("gender", "unknown")
     user_age = db_user.get("age_range", "unknown")
 
@@ -183,16 +197,47 @@ async def handle_start(message: Message) -> None:
         "👉 <i>Tap <b>🔍 Find a Stranger</b> to start chatting!</i>"
     )
 
-    # Attach persistent bottom menu keyboard and inline welcome keyboard
-    await message.answer(
-        welcome_text,
-        reply_markup=get_welcome_keyboard(),
-    )
-    # Send persistent mobile control keyboard
-    await message.answer(
-        "💡 <i>Use the quick action buttons below anytime:</i>",
-        reply_markup=get_idle_reply_keyboard(),
-    )
+    try:
+        await message.answer(
+            welcome_text,
+            reply_markup=get_welcome_keyboard(),
+        )
+    except Exception as e:
+        logger.warning("Failed to send welcome card: %s", e)
+        await message.answer(
+            "👋 Welcome to Stranger Chat!\n\nTap /find to search for a partner.",
+            reply_markup=get_idle_reply_keyboard(),
+        )
+        return
+
+    try:
+        await message.answer(
+            "💡 <i>Use the quick action buttons below anytime:</i>",
+            reply_markup=get_idle_reply_keyboard(),
+        )
+    except Exception as e:
+        logger.warning("Failed to send idle reply keyboard: %s", e)
+
+
+@router.callback_query(F.data == "cb_end_and_restart")
+async def handle_end_and_restart(callback: CallbackQuery) -> None:
+    """Closes current session and redisplays the start welcome menu."""
+    await callback.answer("Chat ended.")
+    if not callback.from_user or not callback.message:
+        return
+    tg_id = callback.from_user.id
+    session = await database.close_session_for_user(tg_id)
+    if session:
+        partner_id = session["user2_id"] if session["user1_id"] == tg_id else session["user1_id"]
+        try:
+            await callback.bot.send_message(
+                chat_id=partner_id,
+                text="👋 <i>Your partner has disconnected.</i>\n\nTap <b>🔍 Find Stranger</b> to start a new chat!",
+                reply_markup=get_idle_reply_keyboard(),
+            )
+        except Exception:
+            pass
+    await handle_start(callback.message)
 
 
 @router.message(Command("help"))

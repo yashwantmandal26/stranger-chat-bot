@@ -37,8 +37,8 @@ ADMIN_UPI_ID: str = os.getenv("ADMIN_UPI_ID", "admin@upi").strip().strip("'\"")
 # 4. Async SQLite Database file path
 DB_PATH: str = os.getenv("DB_PATH", str(BASE_DIR / "stranger_chat.db")).strip().strip("'\"")
 
-# 5. Account age restriction (in days)
-MIN_ACCOUNT_AGE_DAYS: int = int(os.getenv("MIN_ACCOUNT_AGE_DAYS", "30").strip().strip("'\""))
+# 5. Account age restriction (in days, default 0 for launch)
+MIN_ACCOUNT_AGE_DAYS: int = int(os.getenv("MIN_ACCOUNT_AGE_DAYS", "0").strip().strip("'\""))
 
 # 6. Web Server Port
 _port_raw = os.getenv("PORT", "8080").strip().strip("'\"")

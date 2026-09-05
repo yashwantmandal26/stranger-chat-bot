@@ -322,14 +322,20 @@ async def on_startup(bot: Bot) -> None:
                 if webhook_url.endswith("/webhook")
                 else f"{webhook_url.rstrip('/')}/webhook"
             )
-            logger.info("Registering webhook with Telegram: %s", target_webhook)
-            await bot.set_webhook(
-                url=target_webhook,
-                drop_pending_updates=True,
-                allowed_updates=handlers.router.resolve_used_update_types(),
-            )
-            webhook_info = await bot.get_webhook_info()
-            logger.info("Telegram Webhook active! URL: %s", webhook_info.url)
+            try:
+                curr_info = await bot.get_webhook_info()
+                if curr_info.url != target_webhook:
+                    logger.info("Setting webhook with Telegram: %s", target_webhook)
+                    await bot.set_webhook(
+                        url=target_webhook,
+                        drop_pending_updates=False,
+                        allowed_updates=handlers.router.resolve_used_update_types(),
+                    )
+                    logger.info("Telegram Webhook updated to: %s", target_webhook)
+                else:
+                    logger.info("Telegram Webhook is already configured: %s", curr_info.url)
+            except Exception as e:
+                logger.warning("Error checking or setting webhook: %s", e)
         else:
             logger.warning("WEBHOOK_URL is not set. Webhook was not registered with Telegram.")
 
@@ -401,8 +407,12 @@ def main() -> None:
     # Serve SEO landing page on root GET /
     app.router.add_get("/", health_check_and_landing)
 
-    # Telegram webhook POST route
-    SimpleRequestHandler(dispatcher=dp, bot=bot).register(app, path="/webhook")
+    # Telegram webhook POST route (handle_in_background=False ensures synchronous processing before HTTP response)
+    SimpleRequestHandler(
+        dispatcher=dp,
+        bot=bot,
+        handle_in_background=False,
+    ).register(app, path="/webhook")
 
     setup_application(app, dp, bot=bot)
 
