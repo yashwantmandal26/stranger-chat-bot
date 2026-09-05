@@ -217,6 +217,16 @@ def get_number_guess_keyboard(prefix: str = "cb_solo_guess") -> InlineKeyboardMa
     )
 
 
+def get_guess_waiting_keyboard() -> InlineKeyboardMarkup:
+    """Returns waiting keyboard when it is partner's turn in number guess duel."""
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="⏳ Partner's Turn (Please Wait...)", callback_data="cb_duel_guess_wait")],
+            [InlineKeyboardButton(text="🎮 Games Menu", callback_data="cb_game:menu")],
+        ]
+    )
+
+
 def get_math_puzzle_keyboard(options: list[int], prefix: str = "cb_solo_math") -> InlineKeyboardMarkup:
     """Returns 4 multiple-choice buttons in a 2x2 grid for math problems."""
     buttons = [InlineKeyboardButton(text=str(opt), callback_data=f"{prefix}:{opt}") for opt in options]

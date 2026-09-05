@@ -239,11 +239,15 @@ class GuessDuel:
     user1_id: int
     user2_id: int
     target: int
+    current_turn: int
+    starter_id: int
     winner_id: Optional[int] = None
     finished: bool = False
     started_at: float = field(default_factory=time.time)
     attempts: dict[int, int] = field(default_factory=dict)
     history: dict[int, list[tuple[int, str]]] = field(default_factory=dict)
+    message_ids: dict[int, int] = field(default_factory=dict)
+    last_guess: Optional[dict[str, Any]] = None
 
 
 @dataclass
@@ -380,8 +384,10 @@ class DuelGamesManager:
             return False, dict(duel.moves), None, scores
 
     # --- Number Guess Duel ---
-    async def start_guess_duel(self, session_id: int, user1_id: int, user2_id: int) -> int:
-        """Starts a number guess race between both users."""
+    async def start_guess_duel(
+        self, session_id: int, user1_id: int, user2_id: int, starter_id: int
+    ) -> int:
+        """Starts a turn-based number guess race between both users."""
         target = random.randint(0, 9)
         async with self._lock:
             self._guess_duels[session_id] = GuessDuel(
@@ -389,26 +395,61 @@ class DuelGamesManager:
                 user1_id=user1_id,
                 user2_id=user2_id,
                 target=target,
+                current_turn=starter_id,
+                starter_id=starter_id,
                 attempts={user1_id: 0, user2_id: 0},
                 history={user1_id: [], user2_id: []},
+                message_ids={},
+                last_guess=None,
             )
         return target
 
+    async def register_guess_duel_msg(
+        self, session_id: int, user_id: int, message_id: int
+    ) -> None:
+        """Stores the message ID of the duel card for in-place editing."""
+        async with self._lock:
+            duel = self._guess_duels.get(session_id)
+            if duel:
+                duel.message_ids[user_id] = message_id
+
+    async def get_guess_duel_partner_msg_id(
+        self, session_id: int, partner_id: int
+    ) -> Optional[int]:
+        """Gets stored message ID for the partner."""
+        async with self._lock:
+            duel = self._guess_duels.get(session_id)
+            if duel:
+                return duel.message_ids.get(partner_id)
+            return None
+
     async def submit_guess_duel(
         self, session_id: int, user_id: int, guess: int
-    ) -> tuple[str, int, Optional[int], int, int, float, tuple[int, int, int]]:
+    ) -> tuple[
+        str,
+        int,
+        Optional[int],
+        int,
+        int,
+        float,
+        tuple[int, int, int],
+        Optional[dict[str, Any]],
+        Optional[int],
+    ]:
         """
-        Evaluates a guess in duel mode.
+        Evaluates a guess in turn-based duel mode.
         Returns:
-          (status, target, winner_id, my_attempts, partner_attempts, elapsed_secs, (my_score, partner_score, ties))
-          status: 'correct' | 'higher' | 'lower' | 'already_finished' | 'no_game'
+          (status, target, winner_id, my_attempts, partner_attempts, elapsed_secs, (my_score, partner_score, ties), last_guess_info, partner_msg_id)
+          status: 'correct' | 'higher' | 'lower' | 'not_your_turn' | 'already_finished' | 'no_game'
         """
         async with self._lock:
             duel = self._guess_duels.get(session_id)
             if not duel:
-                return "no_game", 0, None, 0, 0, 0.0, (0, 0, 0)
+                return "no_game", 0, None, 0, 0, 0.0, (0, 0, 0), None, None
 
             p_id = duel.user2_id if duel.user1_id == user_id else duel.user1_id
+            p_msg_id = duel.message_ids.get(p_id)
+
             if duel.finished:
                 scores = self._scoreboard.get_score(session_id, user_id, p_id)
                 return (
@@ -419,6 +460,22 @@ class DuelGamesManager:
                     duel.attempts.get(p_id, 0),
                     0.0,
                     scores,
+                    duel.last_guess,
+                    p_msg_id,
+                )
+
+            if duel.current_turn != user_id:
+                scores = self._scoreboard.get_score(session_id, user_id, p_id)
+                return (
+                    "not_your_turn",
+                    duel.target,
+                    None,
+                    duel.attempts.get(user_id, 0),
+                    duel.attempts.get(p_id, 0),
+                    0.0,
+                    scores,
+                    duel.last_guess,
+                    p_msg_id,
                 )
 
             duel.attempts[user_id] = duel.attempts.get(user_id, 0) + 1
@@ -432,15 +489,16 @@ class DuelGamesManager:
                 elapsed = max(1.0, round(time.time() - duel.started_at, 1))
                 self._scoreboard.record_result(session_id, user_id, duel.user1_id, duel.user2_id)
                 scores = self._scoreboard.get_score(session_id, user_id, p_id)
-                return "correct", target, user_id, my_att, p_att, elapsed, scores
-            elif guess < target:
-                duel.history.setdefault(user_id, []).append((guess, "higher"))
-                scores = self._scoreboard.get_score(session_id, user_id, p_id)
-                return "higher", target, None, my_att, p_att, 0.0, scores
-            else:
-                duel.history.setdefault(user_id, []).append((guess, "lower"))
-                scores = self._scoreboard.get_score(session_id, user_id, p_id)
-                return "lower", target, None, my_att, p_att, 0.0, scores
+                return "correct", target, user_id, my_att, p_att, elapsed, scores, None, p_msg_id
+
+            # Wrong guess -> turn shifts to partner!
+            duel.current_turn = p_id
+            status = "higher" if guess < target else "lower"
+            last_guess_info = {"by": user_id, "digit": guess, "status": status}
+            duel.last_guess = last_guess_info
+            duel.history.setdefault(user_id, []).append((guess, status))
+            scores = self._scoreboard.get_score(session_id, user_id, p_id)
+            return status, target, None, my_att, p_att, 0.0, scores, last_guess_info, p_msg_id
 
     # --- Interactive Turn Dice Duel ---
     async def start_dice_duel(
