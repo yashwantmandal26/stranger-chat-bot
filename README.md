@@ -85,23 +85,36 @@ Interactive real-time games playable both solo and live with connected strangers
 - **🏆 Persistent Session Scoreboard**: Tracks cumulative score (`You 2 — 1 Partner`) across all duels within the session.
 - **🚫 Zero Modal Popups**: All callback queries acknowledge silently—no intrusive dialog boxes with "OK" buttons.
 
-### 5. 🎲 Friendly Icebreakers
-- 30+ curated, warm conversation starter questions (`/icebreaker` or `🎲 Icebreaker`).
+### 5. 🎲 Icebreakers & Conversation Starters
+- 40+ curated, thought-provoking questions across lighthearted, deep, and creative themes.
 - Delivered in clean, natural question format into chat without distracting borders or dividers.
 
-### 6. 🛡️ Trust, Safety & Community Moderation
+### 6. 💬 Real-Time Typing & Uploading Action Indicators
+- Transmits native Telegram chat actions (`typing`, `upload_photo`, `upload_video`, `record_voice`, `upload_document`, `choose_sticker`) directly to your partner so you always know when they are responding.
+
+### 7. 🌐 Preferred Language Matching (Optional)
+- Select your preferred chat language (`English`, `Hindi`, `Hinglish`, `Spanish`, `Russian`, `Arabic`, or `Any`).
+- Matchmaking prioritizes same-language partners with automatic, zero-delay fallback so no user is ever left waiting. Completely optional—users can search freely without setting a language.
+
+### 8. 👁️ Media Blur & Spoiler Protection
+- One-tap toggle (`/spoiler`) applies Telegram's native tap-to-reveal blur to photos, videos, and animations. Protects users from accidental NSFW exposure and ensures safe browsing in public spaces.
+
+### 9. 📢 Admin Broadcast Engine
+- Secure admin-only broadcast engine (`/broadcast`) capable of dispatching announcements or forwarded rich media to all registered non-banned users. Includes automatic Telegram rate limiting (~28 msgs/sec), retry-after protection, and real-time delivery performance metrics.
+
+### 10. 🛡️ Trust, Safety & Community Moderation
 - **Account Age Estimator**: Validates account registration date against Telegram user ID checkpoints (`account_age.py`). Accounts younger than 30 days are automatically restricted from matchmaking to block disposable spam bots.
 - **Reason-Based Reporting**: Reporting prompts users with structured categories (`Inappropriate / NSFW`, `Harassment`, `Spam`, `Creepy Behavior`, `Other`).
 - **Automated 3-Strike Ban**: Auto-bans malicious accounts upon reaching 3 moderation strikes.
 
-### 7. 📱 Sleek, Minimal Mobile UX
+### 11. 📱 Sleek, Minimal Mobile UX
 - **No Heavy Dividers**: Zero box-drawing characters (`━`); clean typography with standard line breaks.
 - **Compact Reply Keyboards**:
   - **Idle Mode**: 3 rows (`[🔍 Find Stranger]`, `[🎮 Games] [🎲 Icebreaker]`, `[👤 Profile] [❓ Help]`).
   - **Active Chat Mode**: 2 rows (`[⏭️ Next] [⏹️ End]`, `[🎲 Icebreaker] [🎮 Game] [🚨 Report]`).
   - Maximizes vertical screen real estate for reading chat messages on smartphones.
 
-### 8. 🌐 Built-in SEO & Web Landing Page
+### 12. 🌐 Built-in SEO & Web Landing Page
 - Dark-mode glassmorphic HTML landing page served on `GET /` with OpenGraph meta tags, feature cards, and direct Telegram deep-links.
 - Automatically synchronizes Telegram Bot SEO descriptions (`set_my_description`, `set_my_short_description`) on startup for maximum discovery in Telegram search.
 
@@ -161,6 +174,8 @@ SQLite with **Write-Ahead Logging (WAL)** mode enabled:
 | `premium_expiry`| `TEXT` | ISO 8601 timestamp of VIP expiration |
 | `account_created_at` | `TEXT` | Estimated Telegram account creation date |
 | `chat_count` | `INTEGER` | Total number of chat sessions completed |
+| `language` | `TEXT` | Preferred language code (default `'any'`) |
+| `media_spoiler` | `INTEGER` | Tap-to-reveal blur toggle (`1` = ON, `0` = OFF) |
 
 ### `chat_sessions`
 | Column | Type | Description |
@@ -284,10 +299,13 @@ Render Web Services provide automatic HTTPS, custom domains, and zero-downtime d
 | `/profile` | `👤 Profile` | Any | Displays anonymous profile card and stats |
 | `/gender` | Inline Button | Any | View or update gender preference |
 | `/age` | Inline Button | Any | View or update age bracket |
+| `/language` | Inline Button | Any | Choose preferred chat language (Optional) |
+| `/spoiler` | Inline Button | Any | Toggle tap-to-reveal blur on photos & videos |
 | `/report` | `🚨 Report` | Active Chat | Report partner with category reason (auto-ban on 3 strikes) |
 | `/invite` | — | Any | One-tap Telegram share button |
 | `/help` | `❓ Help` | Any | Command guide, etiquette & encryption guarantee |
 | `/stats` | — | Admin only | Live analytics, queue size, and active user metrics |
+| `/broadcast` | — | Admin only | Broadcast announcement or media to all users with rate limiting |
 
 ---
 

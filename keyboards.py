@@ -78,7 +78,58 @@ def get_profile_keyboard() -> InlineKeyboardMarkup:
                 InlineKeyboardButton(text="🎂 Age", callback_data="cb_open_age"),
             ],
             [
+                InlineKeyboardButton(text="🌐 Language", callback_data="cb_open_language"),
+                InlineKeyboardButton(text="👁️ Media Blur", callback_data="cb_open_spoiler"),
+            ],
+            [
                 InlineKeyboardButton(text="🔍 Find Stranger", callback_data="cb_start_find"),
+            ],
+        ]
+    )
+
+
+def get_language_keyboard(current_lang: str = "any") -> InlineKeyboardMarkup:
+    """Returns inline keyboard for preferred conversation language selection."""
+    curr = (current_lang or "any").lower().strip()
+    languages = [
+        ("any", "🌐 Any (Global)"),
+        ("en", "🇺🇸 English"),
+        ("hi", "🇮🇳 Hindi"),
+        ("hinglish", "🇮🇳 Hinglish"),
+        ("es", "🇪🇸 Spanish"),
+        ("ru", "🇷🇺 Russian"),
+        ("ar", "🇸🇦 Arabic"),
+    ]
+    rows = []
+    any_label = f"✓ {languages[0][1]}" if curr == "any" else languages[0][1]
+    rows.append([InlineKeyboardButton(text=any_label, callback_data="cb_lang:any")])
+
+    lang_buttons = []
+    for code, label in languages[1:]:
+        text = f"✓ {label}" if curr == code else label
+        lang_buttons.append(InlineKeyboardButton(text=text, callback_data=f"cb_lang:{code}"))
+
+    for i in range(0, len(lang_buttons), 2):
+        rows.append(lang_buttons[i : i + 2])
+
+    rows.append([InlineKeyboardButton(text="🔙 Back to Profile", callback_data="cb_open_profile")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def get_spoiler_toggle_keyboard(is_enabled: bool) -> InlineKeyboardMarkup:
+    """Returns inline keyboard to toggle media spoiler / blur protection."""
+    status_text = (
+        "👁️ Media Blur: ON ✅ (Tap to Disable)"
+        if is_enabled
+        else "👁️ Media Blur: OFF ❌ (Tap to Enable)"
+    )
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text=status_text, callback_data="cb_toggle_spoiler"),
+            ],
+            [
+                InlineKeyboardButton(text="🔙 Back to Profile", callback_data="cb_open_profile"),
             ],
         ]
     )

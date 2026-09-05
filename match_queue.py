@@ -16,13 +16,14 @@ class QueueUser:
     is_premium: bool
     joined_at: float
     age_range: str = "unknown"
+    language: str = "any"
 
 
 class MatchQueueManager:
     """
     Thread-safe & asyncio-safe virtual queue for Stranger Chat.
     Handles opposite-gender matching with fallback to any gender,
-    with priority for premium users and wait time.
+    with priority for premium users, language preference, and wait time.
     """
 
     def __init__(self) -> None:
@@ -52,15 +53,18 @@ class MatchQueueManager:
         gender: str,
         is_premium: bool,
         age_range: str = "unknown",
+        language: str = "any",
     ) -> tuple[Optional[int], bool]:
         """
         Attempts to match the user with a partner waiting in the queue.
         1. If user specified 'male' or 'female', tries opposite-gender candidates first.
         2. If no opposite-gender candidates are found (or user is 'prefer_not_to_say'),
            falls back to matching with ANY available user in the queue.
-        3. If no users are waiting in the queue, enqueues this user.
+        3. Prioritizes: VIP premium, matching preferred language, matching age range, wait time.
+        4. If no users are waiting in the queue, enqueues this user.
         """
         gender_norm = gender.lower().strip()
+        lang_norm = (language or "any").lower().strip()
         target_gender = (
             "female"
             if gender_norm == "male"
@@ -83,19 +87,22 @@ class MatchQueueManager:
                     if u.gender.lower() == target_gender and u.tg_id != tg_id
                 ]
 
-            # 2. Fallback: If opposite gender is not found, match with ANY available user
+            # 2. Fallback: If prefer_not_to_say, match any available user.
+            # If target_gender is specified, fall back to any available user if waiting >= 15s.
             if not candidates:
+                now = time.time()
                 candidates = [
                     u
                     for u in self._queue.values()
-                    if u.tg_id != tg_id
+                    if u.tg_id != tg_id and (target_gender is None or (now - u.joined_at) >= 15.0)
                 ]
 
             if candidates:
-                # Priority: Premium first, same age range preference, oldest wait time
+                # Priority: Premium first, preferred language match, same age range preference, oldest wait time
                 candidates.sort(
                     key=lambda u: (
                         not u.is_premium,
+                        (u.language != "any" and lang_norm != "any" and u.language != lang_norm),
                         (u.age_range != age_range)
                         if (age_range != "unknown" and u.age_range != "unknown")
                         else False,
@@ -110,14 +117,16 @@ class MatchQueueManager:
                 # Create persistent session in SQLite
                 await database.create_chat_session(tg_id, matched_user.tg_id)
                 logger.info(
-                    "Matched user %s (%s, age=%s, prem=%s) with %s (%s, age=%s, prem=%s). Session created.",
+                    "Matched user %s (%s, age=%s, lang=%s, prem=%s) with %s (%s, age=%s, lang=%s, prem=%s). Session created.",
                     tg_id,
                     gender_norm,
                     age_range,
+                    lang_norm,
                     is_premium,
                     matched_user.tg_id,
                     matched_user.gender,
                     matched_user.age_range,
+                    matched_user.language,
                     matched_user.is_premium,
                 )
                 return matched_user.tg_id, True
@@ -129,12 +138,14 @@ class MatchQueueManager:
                 is_premium=is_premium,
                 joined_at=time.time(),
                 age_range=age_range,
+                language=lang_norm,
             )
             logger.info(
-                "Enqueued user %s (%s, age=%s, prem=%s). Queue size: %d",
+                "Enqueued user %s (%s, age=%s, lang=%s, prem=%s). Queue size: %d",
                 tg_id,
                 gender_norm,
                 age_range,
+                lang_norm,
                 is_premium,
                 len(self._queue),
             )

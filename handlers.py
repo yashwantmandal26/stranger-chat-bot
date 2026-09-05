@@ -1,6 +1,8 @@
+import asyncio
 import html
 import logging
 import random
+import time
 from typing import Any
 from aiogram import F, Router
 from aiogram.exceptions import TelegramAPIError
@@ -23,6 +25,7 @@ from keyboards import (
     get_guess_waiting_keyboard,
     get_idle_reply_keyboard,
     get_invite_keyboard,
+    get_language_keyboard,
     get_math_puzzle_keyboard,
     get_number_guess_keyboard,
     get_partner_disconnected_keyboard,
@@ -30,6 +33,7 @@ from keyboards import (
     get_report_reasons_keyboard,
     get_rps_keyboard,
     get_search_keyboard,
+    get_spoiler_toggle_keyboard,
     get_welcome_keyboard,
 )
 from match_queue import match_queue
@@ -55,12 +59,31 @@ HELP_TEXT = (
     "• <b>/profile</b> — 👤 View your profile\n"
     "• <b>/gender</b> — 👤 Set gender preference\n"
     "• <b>/age</b> — 🎂 Set age bracket\n"
+    "• <b>/language</b> — 🌐 Set preferred language (Optional)\n"
+    "• <b>/spoiler</b> — 👁️ Blur sensitive photos & media\n"
     "• <b>/report</b> — 🚨 Report inappropriate user\n"
     "• <b>/invite</b> — 🚀 Invite friends\n"
     "• <b>/help</b> — ❓ Help & commands\n\n"
     "🔐 <b>End-to-End Encrypted:</b> <i>All chats are 100% encrypted & strictly private — no one else can see your messages!</i>\n"
     "🛡️ <i>Be kind, respectful, and keep personal details safe.</i>"
 )
+
+
+LANGUAGE_NAMES = {
+    "any": "Any (Global) 🌐",
+    "en": "English 🇺🇸",
+    "hi": "Hindi 🇮🇳",
+    "hinglish": "Hinglish 🇮🇳",
+    "es": "Spanish 🇪🇸",
+    "ru": "Russian 🇷🇺",
+    "ar": "Arabic 🇸🇦",
+}
+
+
+def format_language_display(lang: Any) -> str:
+    """Formats language code into an aesthetic badge with emoji."""
+    l_code = str(lang or "any").lower().strip()
+    return LANGUAGE_NAMES.get(l_code, "Any (Global) 🌐")
 
 
 def format_gender_display(gender: Any) -> str:
@@ -89,14 +112,20 @@ def format_age_display(age_range: Any) -> str:
     return "Not set"
 
 
-def get_match_found_text(partner_gender: Any, partner_age: Any) -> str:
-    """Returns aesthetic match notification card detailing partner's gender & age."""
+def get_match_found_text(
+    partner_gender: Any,
+    partner_age: Any,
+    partner_lang: Any = "any",
+) -> str:
+    """Returns aesthetic match notification card detailing partner's gender, age, and language."""
     g_display = format_gender_display(partner_gender)
     a_display = format_age_display(partner_age)
+    l_display = format_language_display(partner_lang)
     return (
         "🎉 <b>Connected with a Stranger!</b>\n\n"
         f"• <b>Gender:</b> {g_display}\n"
-        f"• <b>Age:</b> {a_display}\n\n"
+        f"• <b>Age:</b> {a_display}\n"
+        f"• <b>Language:</b> {l_display}\n\n"
         "🔐 <i>End-to-End Encrypted: Only you and your partner can see these messages.</i>\n\n"
         "<i>Say hello 👋 to start chatting!</i>"
     )
@@ -317,6 +346,9 @@ async def build_profile_card(from_user, db_user: dict[str, Any]) -> str:
     _, age_days, _ = account_age.check_account_age(from_user.id)
     user_gender = format_gender_display(db_user.get("gender"))
     user_age = format_age_display(db_user.get("age_range"))
+    user_lang = format_language_display(db_user.get("language", "any"))
+    spoiler_enabled = bool(db_user.get("media_spoiler", 0))
+    spoiler_display = "Enabled 👁️" if spoiler_enabled else "Disabled"
     is_premium = await database.is_premium_active(from_user.id)
     plan_badge = "⭐ VIP Member" if is_premium else "Standard (Free)"
     chats_count = db_user.get("chat_count", 0)
@@ -328,6 +360,8 @@ async def build_profile_card(from_user, db_user: dict[str, Any]) -> str:
         f"• <b>ID:</b> <code>#SC-{str(from_user.id)[-6:]}</code>\n"
         f"• <b>Gender:</b> {user_gender}\n"
         f"• <b>Age:</b> {user_age}\n"
+        f"• <b>Language:</b> {user_lang}\n"
+        f"• <b>Media Blur:</b> {spoiler_display}\n"
         f"• <b>Membership:</b> {plan_badge}\n"
         f"• <b>Account Age:</b> ~{age_days} days\n"
         f"• <b>Chats Completed:</b> {chats_count}\n"
@@ -1438,6 +1472,144 @@ async def handle_age_callback(callback: CallbackQuery) -> None:
         logger.warning("Failed to edit callback message: %s", e)
 
 
+@router.message(Command("language"))
+@router.message(Command("lang"))
+async def handle_language_command(message: Message) -> None:
+    """Allows user to view or update their preferred conversation language."""
+    from_user = message.from_user
+    if not from_user:
+        return
+
+    db_user, is_banned = await get_or_register_user(from_user)
+    if is_banned:
+        await message.answer("⛔ Your account is suspended.")
+        return
+
+    curr_lang = db_user.get("language", "any")
+    curr_display = format_language_display(curr_lang)
+    await message.answer(
+        "🌐 <b>Preferred Chat Language</b>\n\n"
+        f"Current: <b>{curr_display}</b>\n\n"
+        "Choose your preferred conversation language.\n"
+        "<i>(Optional: You'll be prioritized with matching speakers, with automatic fallback so matchmaking never stalls!)</i>",
+        reply_markup=get_language_keyboard(curr_lang),
+    )
+
+
+@router.callback_query(F.data == "cb_open_language")
+async def handle_open_language_callback(callback: CallbackQuery) -> None:
+    """Opens the language selection keyboard from profile or inline buttons."""
+    await callback.answer()
+    if not callback.from_user or not callback.message:
+        return
+    user = await database.get_user(callback.from_user.id) or {}
+    curr_lang = user.get("language", "any")
+    curr_display = format_language_display(curr_lang)
+    text = (
+        "🌐 <b>Preferred Chat Language</b>\n\n"
+        f"Current: <b>{curr_display}</b>\n\n"
+        "Choose your preferred conversation language below:"
+    )
+    try:
+        await callback.message.edit_text(text, reply_markup=get_language_keyboard(curr_lang))
+    except Exception:
+        await callback.message.answer(text, reply_markup=get_language_keyboard(curr_lang))
+
+
+@router.callback_query(F.data.startswith("cb_lang:"))
+async def handle_set_language_callback(callback: CallbackQuery) -> None:
+    """Processes language selection callbacks from inline buttons."""
+    if not callback.from_user or not callback.message:
+        return
+
+    tg_id = callback.from_user.id
+    lang_code = callback.data.split(":")[1]
+    if lang_code not in LANGUAGE_NAMES:
+        await callback.answer("Invalid language selection.")
+        return
+
+    await database.update_user_language(tg_id, lang_code)
+    lang_display = format_language_display(lang_code)
+    await callback.answer(f"Language set to {lang_display}!")
+
+    try:
+        await callback.message.edit_text(
+            f"✅ <b>Language set to {lang_display}!</b>\n\n"
+            "Matchmaking will prioritize partners who speak your language with seamless fallback.\n\n"
+            "👉 Tap <b>🔍 Find Stranger</b> below to start chatting!",
+            reply_markup=get_profile_keyboard(),
+        )
+    except Exception as e:
+        logger.warning("Failed to edit callback message: %s", e)
+
+
+@router.message(Command("spoiler"))
+@router.message(Command("blur"))
+async def handle_spoiler_command(message: Message) -> None:
+    """Toggles media blur / spoiler protection for the user."""
+    from_user = message.from_user
+    if not from_user:
+        return
+
+    db_user, is_banned = await get_or_register_user(from_user)
+    if is_banned:
+        await message.answer("⛔ Your account is suspended.")
+        return
+
+    is_enabled = bool(db_user.get("media_spoiler", 0))
+    status_text = "Enabled 👁️" if is_enabled else "Disabled 🚫"
+    await message.answer(
+        "👁️ <b>Media Blur Protection</b>\n\n"
+        f"Current Status: <b>{status_text}</b>\n\n"
+        "When enabled, all photos, videos, and animations sent and received are blurred "
+        "with Telegram's tap-to-reveal spoiler effect to prevent accidental exposure.",
+        reply_markup=get_spoiler_toggle_keyboard(is_enabled),
+    )
+
+
+@router.callback_query(F.data == "cb_open_spoiler")
+async def handle_open_spoiler_callback(callback: CallbackQuery) -> None:
+    """Opens media blur settings keyboard."""
+    await callback.answer()
+    if not callback.from_user or not callback.message:
+        return
+    user = await database.get_user(callback.from_user.id) or {}
+    is_enabled = bool(user.get("media_spoiler", 0))
+    status_text = "Enabled 👁️" if is_enabled else "Disabled 🚫"
+    text = (
+        "👁️ <b>Media Blur Protection</b>\n\n"
+        f"Current Status: <b>{status_text}</b>\n\n"
+        "When enabled, photos, videos, and animations are blurred until tapped to reveal."
+    )
+    try:
+        await callback.message.edit_text(text, reply_markup=get_spoiler_toggle_keyboard(is_enabled))
+    except Exception:
+        await callback.message.answer(text, reply_markup=get_spoiler_toggle_keyboard(is_enabled))
+
+
+@router.callback_query(F.data == "cb_toggle_spoiler")
+async def handle_toggle_spoiler_callback(callback: CallbackQuery) -> None:
+    """Toggles user's media spoiler blur preference."""
+    if not callback.from_user or not callback.message:
+        return
+
+    tg_id = callback.from_user.id
+    new_state = await database.toggle_user_media_spoiler(tg_id)
+    alert_msg = "Media blur ENABLED 👁️ (Media will be blurred)" if new_state else "Media blur DISABLED"
+    await callback.answer(alert_msg)
+
+    status_text = "Enabled 👁️" if new_state else "Disabled 🚫"
+    text = (
+        "👁️ <b>Media Blur Protection</b>\n\n"
+        f"Current Status: <b>{status_text}</b>\n\n"
+        f"✅ <i>{alert_msg}</i>"
+    )
+    try:
+        await callback.message.edit_text(text, reply_markup=get_spoiler_toggle_keyboard(new_state))
+    except Exception:
+        await callback.message.answer(text, reply_markup=get_spoiler_toggle_keyboard(new_state))
+
+
 @router.callback_query(F.data == "cb_start_find")
 async def handle_start_find_callback(callback: CallbackQuery) -> None:
     """Handles the 'Find a Stranger' button from the welcome message."""
@@ -1508,6 +1680,7 @@ async def execute_find_flow(message: Message, from_user) -> None:
 
     # Check premium status
     is_premium = await database.is_premium_active(tg_id)
+    user_lang = db_user.get("language", "any")
 
     # Attempt match or enqueue
     partner_id, matched = await match_queue.find_match_or_enqueue(
@@ -1515,17 +1688,21 @@ async def execute_find_flow(message: Message, from_user) -> None:
         gender=gender,
         is_premium=is_premium,
         age_range=age_range,
+        language=user_lang,
     )
 
     if matched and partner_id:
         partner_db = await database.get_user(partner_id) or {}
+        partner_lang = partner_db.get("language", "any")
         notice_for_me = get_match_found_text(
             partner_gender=partner_db.get("gender"),
             partner_age=partner_db.get("age_range"),
+            partner_lang=partner_lang,
         )
         notice_for_partner = get_match_found_text(
             partner_gender=gender,
             partner_age=age_range,
+            partner_lang=user_lang,
         )
         await message.answer(notice_for_me, reply_markup=get_chat_reply_keyboard())
 
@@ -1608,22 +1785,27 @@ async def execute_next_partner_flow(
         return
 
     is_premium = await database.is_premium_active(tg_id)
+    user_lang = db_user.get("language", "any")
     new_partner_id, matched = await match_queue.find_match_or_enqueue(
         tg_id=tg_id,
         gender=gender,
         is_premium=is_premium,
         age_range=age_range,
+        language=user_lang,
     )
 
     if matched and new_partner_id:
         partner_db = await database.get_user(new_partner_id) or {}
+        partner_lang = partner_db.get("language", "any")
         notice_for_me = get_match_found_text(
             partner_gender=partner_db.get("gender"),
             partner_age=partner_db.get("age_range"),
+            partner_lang=partner_lang,
         )
         notice_for_partner = get_match_found_text(
             partner_gender=gender,
             partner_age=age_range,
+            partner_lang=user_lang,
         )
         if target_msg:
             await target_msg.answer(notice_for_me, reply_markup=get_chat_reply_keyboard())
@@ -1971,12 +2153,109 @@ async def handle_cancel_search_callback(callback: CallbackQuery) -> None:
         await callback.answer("You are not currently in the queue.")
 
 
+@router.message(Command("broadcast"))
+async def handle_broadcast_command(message: Message) -> None:
+    """
+    Admin-only broadcast engine.
+    Broadcasts text or replied media to all non-banned users in SQLite
+    with strict rate limiting (~28 msgs/sec) and detailed delivery metrics.
+    """
+    from_user = message.from_user
+    if not from_user or from_user.id != config.ADMIN_ID:
+        await message.answer("⛔ Access denied. This command is restricted to administrators.")
+        return
+
+    command_args = message.text.partition(" ")[2].strip() if message.text else ""
+    target_reply = message.reply_to_message
+
+    if not command_args and not target_reply:
+        await message.answer(
+            "📢 <b>Admin Broadcast Usage:</b>\n\n"
+            "• <code>/broadcast &lt;announcement text&gt;</code> — Broadcast text message to all users.\n"
+            "• Reply to any media or message with <code>/broadcast</code> to broadcast that media to everyone.\n\n"
+            "⚡ <i>Built-in safety: Rate-limited at ~28 msgs/sec with auto retry-after handling.</i>"
+        )
+        return
+
+    recipients = await database.get_broadcast_user_ids()
+    total = len(recipients)
+
+    if total == 0:
+        await message.answer("⚠️ No registered active users found to broadcast to.")
+        return
+
+    status_msg = await message.answer(
+        f"📢 <b>Broadcast Starting...</b>\n\n"
+        f"Targeting: <b>{total}</b> non-banned users.\n"
+        "<i>Delivering messages smoothly...</i>"
+    )
+
+    sent_count = 0
+    blocked_count = 0
+    failed_count = 0
+    start_time = time.time()
+
+    for uid in recipients:
+        try:
+            if target_reply:
+                await target_reply.copy_to(chat_id=uid)
+            else:
+                await message.bot.send_message(
+                    chat_id=uid,
+                    text=f"📢 <b>Announcement</b>\n\n{command_args}",
+                )
+            sent_count += 1
+        except TelegramAPIError as e:
+            err_str = str(e).lower()
+            if "blocked" in err_str or "forbidden" in err_str or "deactivated" in err_str or "chat not found" in err_str:
+                blocked_count += 1
+            elif "retry after" in err_str:
+                try:
+                    await asyncio.sleep(2.0)
+                    if target_reply:
+                        await target_reply.copy_to(chat_id=uid)
+                    else:
+                        await message.bot.send_message(
+                            chat_id=uid,
+                            text=f"📢 <b>Announcement</b>\n\n{command_args}",
+                        )
+                    sent_count += 1
+                except Exception:
+                    failed_count += 1
+            else:
+                failed_count += 1
+        except Exception:
+            failed_count += 1
+
+        # Safe rate limiting: 0.035s sleep = max 28 requests/sec
+        await asyncio.sleep(0.035)
+
+    elapsed = time.time() - start_time
+    rate = sent_count / max(elapsed, 0.1)
+
+    summary_text = (
+        "📢 <b>Broadcast Completed!</b>\n\n"
+        f"• <b>Total Targeted:</b> {total}\n"
+        f"• <b>Delivered:</b> {sent_count} ✅\n"
+        f"• <b>Blocked / Left:</b> {blocked_count} 🚫\n"
+        f"• <b>Failures:</b> {failed_count} ❌\n"
+        f"• <b>Duration:</b> {elapsed:.1f}s\n"
+        f"• <b>Speed:</b> {rate:.1f} msg/sec"
+    )
+
+    try:
+        await status_msg.edit_text(summary_text)
+    except Exception:
+        await message.answer(summary_text)
+
+
 @router.message()
 async def handle_anonymous_message(message: Message) -> None:
     """
     Core Anonymous Message Forwarding Engine:
-    - If user is in an active session, forwards message to partner using copy_to.
-      Updates session activity timestamp.
+    - Dispatches real-time typing / uploading chat action indicator to partner.
+    - If user or partner enabled media blur, applies Telegram tap-to-reveal spoiler.
+    - Forwards message to partner using copy_to and updates activity timestamp.
     - If not connected, replies with idle menu reminder.
     """
     from_user = message.from_user
@@ -1994,8 +2273,39 @@ async def handle_anonymous_message(message: Message) -> None:
         )
         return
 
+    # Real-time chat action indicator ("Stranger is typing / uploading...")
+    action = "typing"
+    if message.photo:
+        action = "upload_photo"
+    elif message.video or message.video_note or message.animation:
+        action = "upload_video"
+    elif message.voice or message.audio:
+        action = "record_voice"
+    elif message.document:
+        action = "upload_document"
+    elif message.sticker:
+        action = "choose_sticker"
+
     try:
-        await message.copy_to(chat_id=partner_id)
+        await message.bot.send_chat_action(chat_id=partner_id, action=action)
+    except Exception:
+        pass
+
+    # Check spoiler / blur protection preferences
+    sender_db = await database.get_user(tg_id) or {}
+    partner_db = await database.get_user(partner_id) or {}
+    use_spoiler = bool(sender_db.get("media_spoiler", 0)) or bool(partner_db.get("media_spoiler", 0))
+    is_spoilerable = bool(message.photo or message.video or message.animation)
+
+    try:
+        if use_spoiler and is_spoilerable:
+            try:
+                await message.copy_to(chat_id=partner_id, has_spoiler=True)
+            except Exception:
+                await message.copy_to(chat_id=partner_id)
+        else:
+            await message.copy_to(chat_id=partner_id)
+
         await database.update_session_activity(tg_id)
     except TelegramAPIError as e:
         logger.error(

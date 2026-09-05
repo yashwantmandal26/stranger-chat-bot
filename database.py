@@ -59,6 +59,10 @@ async def init_db(db_path: Optional[str] = None) -> None:
             await db.execute("ALTER TABLE users ADD COLUMN chat_count INTEGER DEFAULT 0;")
         if "age_range" not in user_columns:
             await db.execute("ALTER TABLE users ADD COLUMN age_range TEXT DEFAULT 'unknown';")
+        if "language" not in user_columns:
+            await db.execute("ALTER TABLE users ADD COLUMN language TEXT DEFAULT 'any';")
+        if "media_spoiler" not in user_columns:
+            await db.execute("ALTER TABLE users ADD COLUMN media_spoiler INTEGER DEFAULT 0;")
 
         # Ensure last_activity_at column exists if table already existed
         async with db.execute("PRAGMA table_info(chat_sessions);") as cursor:
@@ -469,3 +473,35 @@ async def report_partner(
     return partner_id, strikes, is_banned
 
 
+async def update_user_language(tg_id: int, language: str) -> None:
+    """Updates user's preferred conversation language (e.g. 'en', 'hi', 'hinglish', 'any')."""
+    async with aiosqlite.connect(config.DB_PATH) as db:
+        await db.execute(
+            "UPDATE users SET language = ? WHERE tg_id = ?",
+            (language, tg_id),
+        )
+        await db.commit()
+
+
+async def toggle_user_media_spoiler(tg_id: int) -> bool:
+    """Toggles user's media blur spoiler setting (0 or 1). Returns new state (True = ON)."""
+    user = await get_user(tg_id) or {}
+    current = int(user.get("media_spoiler") or 0)
+    new_val = 0 if current == 1 else 1
+    async with aiosqlite.connect(config.DB_PATH) as db:
+        await db.execute(
+            "UPDATE users SET media_spoiler = ? WHERE tg_id = ?",
+            (new_val, tg_id),
+        )
+        await db.commit()
+    return new_val == 1
+
+
+async def get_broadcast_user_ids() -> list[int]:
+    """Fetches all non-banned Telegram user IDs for admin broadcasts."""
+    async with aiosqlite.connect(config.DB_PATH) as db:
+        async with db.execute(
+            "SELECT tg_id FROM users WHERE is_banned = 0 ORDER BY tg_id ASC"
+        ) as cursor:
+            rows = await cursor.fetchall()
+            return [row[0] for row in rows]
