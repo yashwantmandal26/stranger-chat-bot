@@ -90,6 +90,32 @@ def get_search_keyboard() -> InlineKeyboardMarkup:
     )
 
 
+def get_report_reasons_keyboard() -> InlineKeyboardMarkup:
+    """Returns inline keyboard with selectable report reason options."""
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text="🔞 Inappropriate / NSFW", callback_data="cb_report:nsfw"),
+            ],
+            [
+                InlineKeyboardButton(text="🤬 Harassment / Abuse", callback_data="cb_report:abuse"),
+            ],
+            [
+                InlineKeyboardButton(text="📢 Spam / Advertising", callback_data="cb_report:spam"),
+            ],
+            [
+                InlineKeyboardButton(text="👤 Creepy / Uncomfortable", callback_data="cb_report:creepy"),
+            ],
+            [
+                InlineKeyboardButton(text="❌ Other Policy Violation", callback_data="cb_report:other"),
+            ],
+            [
+                InlineKeyboardButton(text="🔙 Cancel", callback_data="cb_report:cancel"),
+            ],
+        ]
+    )
+
+
 def get_welcome_keyboard() -> InlineKeyboardMarkup:
     """Returns inline keyboard for the upgraded welcome greeting."""
     return InlineKeyboardMarkup(

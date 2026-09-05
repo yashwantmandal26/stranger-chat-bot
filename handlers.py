@@ -22,6 +22,7 @@ from keyboards import (
     get_math_puzzle_keyboard,
     get_number_guess_keyboard,
     get_profile_keyboard,
+    get_report_reasons_keyboard,
     get_rps_keyboard,
     get_search_keyboard,
     get_welcome_keyboard,
@@ -83,14 +84,12 @@ def get_match_found_text(partner_gender: Any, partner_age: Any) -> str:
     g_display = format_gender_display(partner_gender)
     a_display = format_age_display(partner_age)
     return (
-        "🎉 <b>MATCH FOUND!</b>\n"
+        "🎉 <b>Partner Found!</b>\n"
         "━━━━━━━━━━━━━━━━━━━\n"
-        f"👤 <b>Partner:</b> {g_display}\n"
+        f"👤 <b>Gender:</b> {g_display}\n"
         f"🎂 <b>Age:</b> {a_display}\n"
-        "🎭 <b>Identity:</b> 100% Anonymous & Private\n"
-        "⚡ <b>Quick Actions:</b> Tap buttons below or send a message!\n"
         "━━━━━━━━━━━━━━━━━━━\n"
-        "<i>Say hello 👋 or tap 🎲 Send Icebreaker to start!</i>"
+        "<i>Say hello 👋 to start chatting!</i>"
     )
 
 
@@ -308,7 +307,7 @@ async def handle_profile_command(message: Message) -> None:
 @router.message(Command("icebreaker"))
 @router.message(F.text.in_({"🎲 Icebreakers", "🎲 Send Icebreaker"}))
 async def handle_icebreaker(message: Message) -> None:
-    """Sends an engaging conversation starter directly into the chat."""
+    """Sends a friendly conversation starter directly into the chat like a normal question."""
     from_user = message.from_user
     if not from_user:
         return
@@ -317,29 +316,23 @@ async def handle_icebreaker(message: Message) -> None:
     icebreaker_question = icebreakers.get_random_icebreaker()
 
     if not partner_id:
-        # User is idle; inspire them
+        # User is idle; show a clean prompt
         await message.answer(
-            f"🎲 <b>Icebreaker Idea:</b>\n"
-            "━━━━━━━━━━━━━━━━━━━\n"
-            f"<i>\"{icebreaker_question}\"</i>\n"
-            "━━━━━━━━━━━━━━━━━━━\n"
-            "👉 Tap <b>🔍 Find Stranger</b> to ask this to someone new!",
+            f"💡 <b>Conversation starter idea:</b>\n\n{icebreaker_question}\n\n"
+            "👉 Tap <b>🔍 Find Stranger</b> to start chatting!",
             reply_markup=get_idle_reply_keyboard(),
         )
         return
 
-    # In active chat: broadcast question to both users
-    icebreaker_text = (
-        "🎲 <b>Conversation Icebreaker:</b>\n"
-        "━━━━━━━━━━━━━━━━━━━\n"
-        f"<i>\"{icebreaker_question}\"</i>\n"
-        "━━━━━━━━━━━━━━━━━━━"
+    # In active chat: send question directly as normal text (no decorative designs)
+    await message.answer(
+        f"💬 <i>You asked:</i>\n{icebreaker_question}",
+        reply_markup=get_chat_reply_keyboard(),
     )
-    await message.answer(icebreaker_text, reply_markup=get_chat_reply_keyboard())
     try:
         await message.bot.send_message(
             chat_id=partner_id,
-            text=icebreaker_text,
+            text=icebreaker_question,
             reply_markup=get_chat_reply_keyboard(),
         )
     except Exception as e:
@@ -348,12 +341,12 @@ async def handle_icebreaker(message: Message) -> None:
 
 @router.callback_query(F.data == "cb_get_icebreaker")
 async def handle_icebreaker_callback(callback: CallbackQuery) -> None:
-    """Inline callback returning an icebreaker."""
+    """Inline callback returning a friendly icebreaker."""
     await callback.answer()
     icebreaker_question = icebreakers.get_random_icebreaker()
     if callback.message:
         await callback.message.answer(
-            f"🎲 <b>Random Icebreaker:</b>\n\n<i>\"{icebreaker_question}\"</i>",
+            f"💡 <b>Conversation starter:</b>\n\n{icebreaker_question}",
             reply_markup=get_idle_reply_keyboard(),
         )
 
@@ -1504,51 +1497,112 @@ async def handle_stop_command(message: Message) -> None:
     )
 
 
+REPORT_REASONS = {
+    "nsfw": "Inappropriate / NSFW Content",
+    "abuse": "Harassment / Abusive Language",
+    "spam": "Spam / Advertising",
+    "creepy": "Creepy / Uncomfortable Behavior",
+    "other": "Other Policy Violation",
+}
+
+
 @router.message(Command("report"))
 @router.message(F.text == "🚨 Report User")
 async def handle_report_command(message: Message) -> None:
     """
     Handles /report command:
-    - Ends current chat session immediately.
-    - Issues a warning strike to the partner (auto-bans at 3 strikes).
-    - Confirms report to reporter and lets them search safely.
+    - Prompts user to select the reason from a list before reporting.
     """
     from_user = message.from_user
     if not from_user:
         return
 
     tg_id = from_user.id
-    partner_id, partner_strikes, is_partner_banned = await database.report_partner(tg_id)
-
-    if not partner_id:
+    session = await database.get_active_session(tg_id)
+    if not session:
         await message.answer(
             "You are not in an active chat to report.",
             reply_markup=get_idle_reply_keyboard(),
         )
         return
 
-    await match_queue.remove_user(tg_id)
-
-    # Reporter feedback
     await message.answer(
-        "🚨 <b>User Reported & Chat Ended</b>\n"
-        "━━━━━━━━━━━━━━━━━━━\n"
-        "Thank you for helping keep Stranger Chat safe. A moderation strike was recorded.\n\n"
-        "👉 Tap <b>🔍 Find Stranger</b> to connect with someone new!",
-        reply_markup=get_idle_reply_keyboard(),
+        "🚨 <b>Report Partner</b>\n\n"
+        "Why are you reporting this user? Please select a reason below:",
+        reply_markup=get_report_reasons_keyboard(),
     )
 
-    # Notify reported user
+
+@router.callback_query(F.data == "cb_report:cancel")
+async def handle_report_cancel(callback: CallbackQuery) -> None:
+    """Cancels the report dialog and preserves the active chat."""
+    await callback.answer("Report cancelled.")
+    if callback.message:
+        try:
+            await callback.message.delete()
+        except Exception:
+            await callback.message.edit_text("Report cancelled. You are still in chat.")
+
+
+@router.callback_query(F.data.startswith("cb_report:"))
+async def handle_report_reason_chosen(callback: CallbackQuery) -> None:
+    """
+    Processes chosen report reason:
+    - Ends active chat session.
+    - Records reason and issues strike to partner (auto-bans at 3 strikes).
+    - Notifies reporter and reported partner.
+    """
+    await callback.answer()
+    if not callback.from_user or not callback.message:
+        return
+
+    tg_id = callback.from_user.id
+    reason_key = callback.data.split(":")[1]
+    reason_label = REPORT_REASONS.get(reason_key, "Policy Violation")
+
+    partner_id, partner_strikes, is_partner_banned = await database.report_partner(
+        reporter_id=tg_id, reason=reason_label
+    )
+
+    if not partner_id:
+        try:
+            await callback.message.edit_text("You are no longer in an active chat.")
+        except Exception:
+            await callback.message.answer(
+                "You are no longer in an active chat.",
+                reply_markup=get_idle_reply_keyboard(),
+            )
+        return
+
+    await match_queue.remove_user(tg_id)
+
+    # Feedback to reporter
+    reporter_text = (
+        "🚨 <b>User Reported & Chat Ended</b>\n"
+        "━━━━━━━━━━━━━━━━━━━\n"
+        f"<b>Reason:</b> {reason_label}\n"
+        "Thank you for helping keep Stranger Chat safe. A moderation strike was recorded.\n\n"
+        "👉 Tap <b>🔍 Find Stranger</b> to connect with someone new!"
+    )
+    try:
+        await callback.message.edit_text(reporter_text)
+    except Exception:
+        await callback.message.answer(reporter_text, reply_markup=get_idle_reply_keyboard())
+
+    # Notification to reported partner
     try:
         penalty_text = (
             "\n⛔ <b>Your account has received 3 strikes and is now permanently banned.</b>"
             if is_partner_banned
             else f"\n⚠️ Warning: You now have {partner_strikes}/3 moderation strikes."
         )
-        await message.bot.send_message(
+        await callback.bot.send_message(
             chat_id=partner_id,
-            text=f"🚨 <b>You were reported by your partner for policy violation.</b>\n"
-                 f"The chat has ended.{penalty_text}",
+            text=(
+                f"🚨 <b>You were reported by your partner.</b>\n"
+                f"<b>Reason:</b> {reason_label}\n"
+                f"The chat has ended.{penalty_text}"
+            ),
             reply_markup=get_idle_reply_keyboard(),
         )
     except Exception as e:

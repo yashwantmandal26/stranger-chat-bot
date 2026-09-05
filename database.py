@@ -77,10 +77,24 @@ async def init_db(db_path: Optional[str] = None) -> None:
             """
         )
 
+        # 4. Reports moderation table
+        await db.execute(
+            """
+            CREATE TABLE IF NOT EXISTS reports (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                reporter_id INTEGER NOT NULL,
+                reported_id INTEGER NOT NULL,
+                reason TEXT NOT NULL,
+                created_at TEXT DEFAULT (datetime('now'))
+            );
+            """
+        )
+
         # Indexes for fast querying
         await db.execute("CREATE INDEX IF NOT EXISTS idx_chat_u1 ON chat_sessions(user1_id);")
         await db.execute("CREATE INDEX IF NOT EXISTS idx_chat_u2 ON chat_sessions(user2_id);")
         await db.execute("CREATE INDEX IF NOT EXISTS idx_prem_tg ON premium_codes(tg_id);")
+        await db.execute("CREATE INDEX IF NOT EXISTS idx_reports_tgt ON reports(reported_id);")
 
         await db.commit()
     logger.info("Database initialized successfully.")
@@ -426,10 +440,12 @@ async def get_stats() -> dict[str, int]:
     }
 
 
-async def report_partner(reporter_id: int) -> tuple[Optional[int], int, bool]:
+async def report_partner(
+    reporter_id: int, reason: str = "General Policy Violation"
+) -> tuple[Optional[int], int, bool]:
     """
     Closes the active chat session for reporter_id, identifies partner,
-    and increments partner strikes (auto-bans at 3 strikes).
+    records the moderation report with reason, and increments partner strikes (auto-bans at 3 strikes).
     Returns (partner_id, partner_strikes, is_partner_banned).
     """
     session = await close_session_for_user(reporter_id)
@@ -441,6 +457,13 @@ async def report_partner(reporter_id: int) -> tuple[Optional[int], int, bool]:
         if session["user1_id"] == reporter_id
         else session["user1_id"]
     )
+
+    async with aiosqlite.connect(config.DB_PATH) as db:
+        await db.execute(
+            "INSERT INTO reports (reporter_id, reported_id, reason) VALUES (?, ?, ?);",
+            (reporter_id, partner_id, reason),
+        )
+        await db.commit()
 
     strikes, is_banned = await add_strike(partner_id)
     return partner_id, strikes, is_banned
