@@ -1,5 +1,35 @@
 import urllib.parse
-from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+from aiogram.types import (
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    KeyboardButton,
+    ReplyKeyboardMarkup,
+)
+
+
+def get_idle_reply_keyboard() -> ReplyKeyboardMarkup:
+    """Persistent mobile bottom keyboard when user is idle (not in chat)."""
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text="🔍 Find Stranger")],
+            [KeyboardButton(text="🎲 Icebreakers"), KeyboardButton(text="👤 Profile")],
+            [KeyboardButton(text="🚀 Invite Friends"), KeyboardButton(text="❓ Help")],
+        ],
+        resize_keyboard=True,
+        is_persistent=True,
+    )
+
+
+def get_chat_reply_keyboard() -> ReplyKeyboardMarkup:
+    """Persistent mobile bottom keyboard when user is actively in a chat."""
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text="⏭️ Next Stranger"), KeyboardButton(text="⏹️ End Chat")],
+            [KeyboardButton(text="🎲 Send Icebreaker"), KeyboardButton(text="🚨 Report User")],
+        ],
+        resize_keyboard=True,
+        is_persistent=True,
+    )
 
 
 def get_gender_keyboard() -> InlineKeyboardMarkup:
@@ -32,7 +62,11 @@ def get_welcome_keyboard() -> InlineKeyboardMarkup:
             [
                 InlineKeyboardButton(text="🔍 Find a Stranger", callback_data="cb_start_find"),
                 InlineKeyboardButton(text="❓ Help", callback_data="cb_help"),
-            ]
+            ],
+            [
+                InlineKeyboardButton(text="👤 Set Gender", callback_data="cb_open_gender"),
+                InlineKeyboardButton(text="🎲 Random Icebreaker", callback_data="cb_get_icebreaker"),
+            ],
         ]
     )
 
@@ -40,7 +74,7 @@ def get_welcome_keyboard() -> InlineKeyboardMarkup:
 def get_invite_keyboard(bot_username: str = "StrangersChattingBot") -> InlineKeyboardMarkup:
     """Returns inline keyboard with a one-tap Telegram share button."""
     share_url = f"https://t.me/{bot_username}"
-    share_text = "I'm chatting with new people worldwide on this free anonymous bot! Join here:"
+    share_text = "⚡ Chat with strangers worldwide anonymously! Safe, fast, and 100% free. Join here:"
     encoded_url = urllib.parse.quote(share_url, safe="")
     encoded_text = urllib.parse.quote(share_text, safe="")
     telegram_share_link = f"https://t.me/share/url?url={encoded_url}&text={encoded_text}"

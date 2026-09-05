@@ -52,6 +52,12 @@ async def init_db(db_path: Optional[str] = None) -> None:
             """
         )
 
+        # Ensure chat_count column exists in users
+        async with db.execute("PRAGMA table_info(users);") as cursor:
+            user_columns = [row[1] for row in await cursor.fetchall()]
+        if "chat_count" not in user_columns:
+            await db.execute("ALTER TABLE users ADD COLUMN chat_count INTEGER DEFAULT 0;")
+
         # Ensure last_activity_at column exists if table already existed
         async with db.execute("PRAGMA table_info(chat_sessions);") as cursor:
             columns = [row[1] for row in await cursor.fetchall()]
@@ -164,7 +170,7 @@ async def add_strike(tg_id: int) -> tuple[int, bool]:
 
 
 async def create_chat_session(user1_id: int, user2_id: int) -> int:
-    """Creates a new active chat session between two users."""
+    """Creates a new active chat session between two users and updates stats."""
     now_str = datetime.now(timezone.utc).isoformat()
     async with aiosqlite.connect(config.DB_PATH) as db:
         cursor = await db.execute(
@@ -175,6 +181,11 @@ async def create_chat_session(user1_id: int, user2_id: int) -> int:
             (user1_id, user2_id, now_str, now_str),
         )
         session_id = cursor.lastrowid
+        # Increment chat_count for both participants
+        await db.execute(
+            "UPDATE users SET chat_count = COALESCE(chat_count, 0) + 1 WHERE tg_id IN (?, ?)",
+            (user1_id, user2_id),
+        )
         await db.commit()
         return session_id or 0
 
@@ -376,4 +387,25 @@ async def get_stats() -> dict[str, int]:
         "female_users": female_users,
         "active_chats": active_chats,
     }
+
+
+async def report_partner(reporter_id: int) -> tuple[Optional[int], int, bool]:
+    """
+    Closes the active chat session for reporter_id, identifies partner,
+    and increments partner strikes (auto-bans at 3 strikes).
+    Returns (partner_id, partner_strikes, is_partner_banned).
+    """
+    session = await close_session_for_user(reporter_id)
+    if not session:
+        return None, 0, False
+
+    partner_id = (
+        session["user2_id"]
+        if session["user1_id"] == reporter_id
+        else session["user1_id"]
+    )
+
+    strikes, is_banned = await add_strike(partner_id)
+    return partner_id, strikes, is_banned
+
 
