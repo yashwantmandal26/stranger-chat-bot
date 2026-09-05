@@ -33,7 +33,13 @@ from keyboards import (
     get_welcome_keyboard,
 )
 from match_queue import match_queue
-from quotes import get_partner_ended_text, get_random_motivational_quote
+from quotes import (
+    format_chat_duration,
+    get_partner_ended_text,
+    get_random_motivational_quote,
+    get_session_elapsed_seconds,
+    get_user_ended_text,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -52,7 +58,8 @@ HELP_TEXT = (
     "• <b>/report</b> — 🚨 Report inappropriate user\n"
     "• <b>/invite</b> — 🚀 Invite friends\n"
     "• <b>/help</b> — ❓ Help & commands\n\n"
-    "🛡️ <i>100% anonymous. Be kind & respectful!</i>"
+    "🔐 <b>End-to-End Encrypted:</b> <i>All chats are 100% encrypted & strictly private — no one else can see your messages!</i>\n"
+    "🛡️ <i>Be kind, respectful, and keep personal details safe.</i>"
 )
 
 
@@ -90,6 +97,7 @@ def get_match_found_text(partner_gender: Any, partner_age: Any) -> str:
         "🎉 <b>Connected with a Stranger!</b>\n\n"
         f"• <b>Gender:</b> {g_display}\n"
         f"• <b>Age:</b> {a_display}\n\n"
+        "🔐 <i>End-to-End Encrypted: Only you and your partner can see these messages.</i>\n\n"
         "<i>Say hello 👋 to start chatting!</i>"
     )
 
@@ -185,6 +193,7 @@ async def handle_start(message: Message) -> None:
         f"👋 <b>Welcome to Stranger Chat{name_display}!</b>\n\n"
         "Connect and chat anonymously with verified people worldwide. "
         "No names, no profiles — pure authentic connection.\n\n"
+        "🔐 <b>End-to-End Encrypted:</b> <i>100% private conversations — no one else can see your chats.</i>\n\n"
         f"{gender_status}"
         f"{age_status}\n"
         "💡 <i>Be respectful. No NSFW or spam.</i>\n\n"
@@ -223,11 +232,13 @@ async def handle_end_and_restart(callback: CallbackQuery) -> None:
     session = await database.close_session_for_user(tg_id)
     if session:
         duel_games.reset_session(session["id"])
+        elapsed = get_session_elapsed_seconds(session)
+        dur_str = format_chat_duration(elapsed)
         partner_id = session["user2_id"] if session["user1_id"] == tg_id else session["user1_id"]
         try:
             await callback.bot.send_message(
                 chat_id=partner_id,
-                text=get_partner_ended_text(),
+                text=get_partner_ended_text(dur_str),
                 reply_markup=get_partner_disconnected_keyboard(),
             )
         except Exception:
@@ -1541,66 +1552,59 @@ async def execute_find_flow(message: Message, from_user) -> None:
         )
 
 
-@router.message(Command("next"))
-@router.message(F.text.in_({"⏭️ Next", "⏭️ Next Stranger"}))
-async def handle_next_command(message: Message) -> None:
-    """
-    Handles /next command:
-    - Ends current session immediately.
-    - Notifies partner: '👋 Stranger has disconnected.'
-    - Re-enqueues user: 'Searching for a new stranger...'
-    - If not in chat, replies: 'You are not in an active chat.'
-    """
-    from_user = message.from_user
-    if not from_user:
-        return
-
+async def execute_next_partner_flow(
+    event: Message | CallbackQuery,
+    from_user: Any,
+) -> None:
+    """Closes current chat and seamlessly matches/enqueues user with a new stranger."""
     tg_id = from_user.id
-    db_user, is_banned = await get_or_register_user(from_user)
-
-    if is_banned:
-        await message.answer("⛔ Your account is suspended.")
-        return
+    bot = event.bot
 
     closed_session = await database.close_session_for_user(tg_id)
-
-    if not closed_session:
-        # User not in active chat (e.g. partner already ended chat or user was idle); seamlessly find next!
-        await execute_find_flow(message, from_user)
-        return
-
-    duel_games.reset_session(closed_session["id"])
-    partner_id = (
-        closed_session["user2_id"]
-        if closed_session["user1_id"] == tg_id
-        else closed_session["user1_id"]
-    )
-
-    try:
-        await message.bot.send_message(
-            chat_id=partner_id,
-            text=get_partner_ended_text(),
-            reply_markup=get_partner_disconnected_keyboard(),
+    if closed_session:
+        duel_games.reset_session(closed_session["id"])
+        elapsed = get_session_elapsed_seconds(closed_session)
+        dur_str = format_chat_duration(elapsed)
+        partner_id = (
+            closed_session["user2_id"]
+            if closed_session["user1_id"] == tg_id
+            else closed_session["user1_id"]
         )
-    except Exception as e:
-        logger.warning("Failed to notify disconnected partner %s: %s", partner_id, e)
+        try:
+            await bot.send_message(
+                chat_id=partner_id,
+                text=get_partner_ended_text(dur_str),
+                reply_markup=get_partner_disconnected_keyboard(),
+            )
+        except Exception as e:
+            logger.warning("Failed to notify disconnected partner %s: %s", partner_id, e)
 
     await match_queue.remove_user(tg_id)
 
+    db_user, is_banned = await get_or_register_user(from_user)
+    target_msg = event if isinstance(event, Message) else event.message
+
+    if is_banned:
+        if target_msg:
+            await target_msg.answer("⛔ Your account is suspended.")
+        return
+
     gender = db_user.get("gender", "unknown")
     if gender not in ("male", "female", "prefer_not_to_say"):
-        await message.answer(
-            "⚠️ Please select your gender first using /gender to find a match.",
-            reply_markup=get_gender_keyboard(),
-        )
+        if target_msg:
+            await target_msg.answer(
+                "⚠️ Please select your gender first using /gender to find a match.",
+                reply_markup=get_gender_keyboard(),
+            )
         return
 
     age_range = db_user.get("age_range", "unknown")
     if age_range not in ("below_18", "18-25", "25-35", "40+"):
-        await message.answer(
-            "🎂 Please select your age bracket first using /age to find a match.",
-            reply_markup=get_age_keyboard(),
-        )
+        if target_msg:
+            await target_msg.answer(
+                "🎂 Please select your age bracket first using /age to find a match.",
+                reply_markup=get_age_keyboard(),
+            )
         return
 
     is_premium = await database.is_premium_active(tg_id)
@@ -1621,9 +1625,10 @@ async def handle_next_command(message: Message) -> None:
             partner_gender=gender,
             partner_age=age_range,
         )
-        await message.answer(notice_for_me, reply_markup=get_chat_reply_keyboard())
+        if target_msg:
+            await target_msg.answer(notice_for_me, reply_markup=get_chat_reply_keyboard())
         try:
-            await message.bot.send_message(
+            await bot.send_message(
                 chat_id=new_partner_id,
                 text=notice_for_partner,
                 reply_markup=get_chat_reply_keyboard(),
@@ -1632,11 +1637,101 @@ async def handle_next_command(message: Message) -> None:
             logger.error("Failed to notify new matched partner %s: %s", new_partner_id, e)
     else:
         vip_tag = " ⭐ <i>(VIP Priority)</i>" if is_premium else ""
-        await message.answer(
-            f"🔍 <b>Searching for a new stranger...</b>{vip_tag}\n\n"
-            "Looking for a match. Please wait a moment...",
-            reply_markup=get_search_keyboard(),
+        if target_msg:
+            await target_msg.answer(
+                f"🔍 <b>Searching for a new stranger...</b>{vip_tag}\n\n"
+                "Looking for a match. Please wait a moment...",
+                reply_markup=get_search_keyboard(),
+            )
+
+
+async def execute_stop_flow(
+    event: Message | CallbackQuery,
+    from_user: Any,
+) -> None:
+    """Closes current chat and presents disconnect motivational card with timing."""
+    tg_id = from_user.id
+    bot = event.bot
+
+    closed_session = await database.close_session_for_user(tg_id)
+    dur_str: Optional[str] = None
+    if closed_session:
+        duel_games.reset_session(closed_session["id"])
+        elapsed = get_session_elapsed_seconds(closed_session)
+        dur_str = format_chat_duration(elapsed)
+        partner_id = (
+            closed_session["user2_id"]
+            if closed_session["user1_id"] == tg_id
+            else closed_session["user1_id"]
         )
+        try:
+            await bot.send_message(
+                chat_id=partner_id,
+                text=get_partner_ended_text(dur_str),
+                reply_markup=get_partner_disconnected_keyboard(),
+            )
+        except Exception as e:
+            logger.warning("Failed to notify partner %s on stop: %s", partner_id, e)
+
+    await match_queue.remove_user(tg_id)
+
+    stop_card = get_user_ended_text(dur_str)
+    if isinstance(event, Message):
+        await event.answer(stop_card, reply_markup=get_partner_disconnected_keyboard())
+    elif event.message:
+        try:
+            await event.message.edit_text(stop_card, reply_markup=get_partner_disconnected_keyboard())
+        except Exception:
+            await event.message.answer(stop_card, reply_markup=get_partner_disconnected_keyboard())
+
+
+@router.message(Command("next"))
+@router.message(F.text.in_({"⏭️ Next", "⏭️ Next Stranger"}))
+async def handle_next_command(message: Message) -> None:
+    """
+    Handles /next command:
+    - If in active chat:
+      - If chat duration is < 10 seconds: does NOT confirm, skips to next partner in one click!
+      - If chat duration is >= 10 seconds: asks for confirmation with chat timing.
+    - If not in chat, seamlessly initiates find flow.
+    """
+    from_user = message.from_user
+    if not from_user:
+        return
+
+    tg_id = from_user.id
+    db_user, is_banned = await get_or_register_user(from_user)
+    if is_banned:
+        await message.answer("⛔ Your account is suspended.")
+        return
+
+    session = await database.get_active_session(tg_id)
+    if not session:
+        # Not in active chat; seamlessly find next stranger
+        await execute_find_flow(message, from_user)
+        return
+
+    elapsed = get_session_elapsed_seconds(session)
+    if elapsed >= 10.0:
+        dur_str = format_chat_duration(elapsed)
+        confirm_text = (
+            "⚠️ <b>Disconnect and find next partner?</b>\n\n"
+            f"⏱️ <b>Chat Duration:</b> <b>{dur_str}</b>\n\n"
+            "Are you sure you want to end this conversation?"
+        )
+        confirm_kb = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    InlineKeyboardButton(text="⏭️ Yes, Next Partner", callback_data="cb_chat_confirm:next"),
+                    InlineKeyboardButton(text="💬 Keep Chatting", callback_data="cb_chat_confirm:cancel"),
+                ]
+            ]
+        )
+        await message.answer(confirm_text, reply_markup=confirm_kb)
+        return
+
+    # If elapsed < 10 seconds, don't confirm: go to next partner in one click!
+    await execute_next_partner_flow(message, from_user)
 
 
 @router.message(Command("stop"))
@@ -1644,43 +1739,43 @@ async def handle_next_command(message: Message) -> None:
 async def handle_stop_command(message: Message) -> None:
     """
     Handles /stop command:
-    - If in active chat: ends session, notifies partner with motivational quote & options.
-      Replies to user with motivational quote & options.
+    - If in active chat:
+      - If chat duration is < 10 seconds: does NOT confirm, ends chat in one click!
+      - If chat duration is >= 10 seconds: asks for confirmation with chat timing.
     - If in queue: removes user from queue.
-    - If neither: replies: 'You are not in an active chat.'
+    - If neither: informs user they are not in chat.
     """
     from_user = message.from_user
     if not from_user:
         return
 
     tg_id = from_user.id
-
-    closed_session = await database.close_session_for_user(tg_id)
-    if closed_session:
-        duel_games.reset_session(closed_session["id"])
-        partner_id = (
-            closed_session["user2_id"]
-            if closed_session["user1_id"] == tg_id
-            else closed_session["user1_id"]
-        )
-
-        try:
-            await message.bot.send_message(
-                chat_id=partner_id,
-                text=get_partner_ended_text(),
-                reply_markup=get_partner_disconnected_keyboard(),
+    session = await database.get_active_session(tg_id)
+    if session:
+        elapsed = get_session_elapsed_seconds(session)
+        if elapsed >= 10.0:
+            dur_str = format_chat_duration(elapsed)
+            confirm_text = (
+                "⚠️ <b>End current chat?</b>\n\n"
+                f"⏱️ <b>Chat Duration:</b> <b>{dur_str}</b>\n\n"
+                "Are you sure you want to disconnect from this stranger?"
             )
-        except Exception as e:
-            logger.warning("Failed to notify partner %s on /stop: %s", partner_id, e)
+            confirm_kb = InlineKeyboardMarkup(
+                inline_keyboard=[
+                    [
+                        InlineKeyboardButton(text="⏹️ Yes, End Chat", callback_data="cb_chat_confirm:stop"),
+                        InlineKeyboardButton(text="⏭️ Next Partner", callback_data="cb_chat_confirm:next"),
+                    ],
+                    [
+                        InlineKeyboardButton(text="💬 Keep Chatting", callback_data="cb_chat_confirm:cancel"),
+                    ],
+                ]
+            )
+            await message.answer(confirm_text, reply_markup=confirm_kb)
+            return
 
-        await match_queue.remove_user(tg_id)
-        await message.answer(
-            "⏹️ <b>Chat ended.</b>\n\n"
-            "✨ <b>Thought of the Moment:</b>\n"
-            f"<i>{get_random_motivational_quote()}</i>\n\n"
-            "Where would you like to go next?",
-            reply_markup=get_partner_disconnected_keyboard(),
-        )
+        # If elapsed < 10 seconds, don't confirm: end in one click!
+        await execute_stop_flow(message, from_user)
         return
 
     removed_from_queue = await match_queue.remove_user(tg_id)
@@ -1697,6 +1792,49 @@ async def handle_stop_command(message: Message) -> None:
         "You are not in an active chat.\nTap <b>🔍 Find Stranger</b> to begin!",
         reply_markup=get_idle_reply_keyboard(),
     )
+
+
+@router.callback_query(F.data.startswith("cb_chat_confirm:"))
+async def handle_chat_confirmation(callback: CallbackQuery) -> None:
+    """Handles confirmation decisions (stop, next, cancel) for ending active chats."""
+    action = callback.data.split(":")[1]
+    await callback.answer()
+
+    if not callback.from_user or not callback.message:
+        return
+
+    tg_id = callback.from_user.id
+
+    if action == "cancel":
+        session = await database.get_active_session(tg_id)
+        if session:
+            try:
+                await callback.message.edit_text(
+                    "💬 <b>Chat continuing!</b> You are still connected with your stranger."
+                )
+            except Exception:
+                pass
+        else:
+            try:
+                await callback.message.edit_text(
+                    "👋 Chat was already ended by partner.",
+                    reply_markup=get_partner_disconnected_keyboard(),
+                )
+            except Exception:
+                pass
+        return
+
+    if action == "stop":
+        await execute_stop_flow(callback, callback.from_user)
+        return
+
+    if action == "next":
+        try:
+            await callback.message.edit_text("⏭️ <b>Ending chat and searching for next stranger...</b>")
+        except Exception:
+            pass
+        await execute_next_partner_flow(callback, callback.from_user)
+        return
 
 
 REPORT_REASONS = {

@@ -1,4 +1,6 @@
+from datetime import datetime, timezone
 import random
+from typing import Any, Optional
 
 MOTIVATIONAL_QUOTES: list[str] = [
     "“Every new beginning comes from some other beginning’s end.” — Seneca",
@@ -39,11 +41,59 @@ def get_random_motivational_quote() -> str:
     return random.choice(MOTIVATIONAL_QUOTES)
 
 
-def get_partner_ended_text() -> str:
+def format_chat_duration(seconds: float) -> str:
+    """Formats duration in seconds to a human-readable string (e.g. '8 seconds', '2m 14s', '1h 5m')."""
+    total_secs = max(0, int(round(seconds)))
+    if total_secs < 60:
+        return f"{total_secs} second{'s' if total_secs != 1 else ''}"
+    minutes = total_secs // 60
+    rem_secs = total_secs % 60
+    if minutes < 60:
+        if rem_secs > 0:
+            return f"{minutes}m {rem_secs}s"
+        return f"{minutes} minute{'s' if minutes != 1 else ''}"
+    hours = minutes // 60
+    rem_mins = minutes % 60
+    if rem_mins > 0:
+        return f"{hours}h {rem_mins}m"
+    return f"{hours} hour{'s' if hours != 1 else ''}"
+
+
+def get_session_elapsed_seconds(session: dict[str, Any]) -> float:
+    """Calculates elapsed seconds since session started."""
+    started_at_str = session.get("started_at")
+    if not started_at_str:
+        return 0.0
+    try:
+        dt = datetime.fromisoformat(started_at_str)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return max(0.0, (datetime.now(timezone.utc) - dt).total_seconds())
+    except Exception:
+        return 0.0
+
+
+def get_partner_ended_text(duration: Optional[str] = None) -> str:
     """Generates the clean card when a chat partner disconnects."""
     quote = get_random_motivational_quote()
+    dur_line = f"⏱️ <b>Chat Duration:</b> <b>{duration}</b>\n\n" if duration else ""
     return (
-        "👋 <b>Chat ended by partner.</b>\n\n"
-        f"✨ <i>{quote}</i>\n\n"
+        "👋 <b>Stranger has disconnected.</b>\n\n"
+        f"{dur_line}"
+        "✨ <b>Thought of the Moment:</b>\n"
+        f"<i>{quote}</i>\n\n"
         "Ready to meet someone new?"
+    )
+
+
+def get_user_ended_text(duration: Optional[str] = None) -> str:
+    """Generates the clean card when a user ends their own chat."""
+    quote = get_random_motivational_quote()
+    dur_line = f"⏱️ <b>Chat Duration:</b> <b>{duration}</b>\n\n" if duration else ""
+    return (
+        "⏹️ <b>Chat ended.</b>\n\n"
+        f"{dur_line}"
+        "✨ <b>Thought of the Moment:</b>\n"
+        f"<i>{quote}</i>\n\n"
+        "Where would you like to go next?"
     )

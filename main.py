@@ -166,6 +166,10 @@ SEO_LANDING_HTML = """<!DOCTYPE html>
 
         <div class="features">
             <div class="feature-card">
+                <h3>🔐 End-to-End Encrypted</h3>
+                <p>100% private and encrypted. No one else can ever see your messages.</p>
+            </div>
+            <div class="feature-card">
                 <h3>👫 Gender Match</h3>
                 <p>Smart matchmaking connects you with the opposite gender automatically.</p>
             </div>
@@ -199,7 +203,7 @@ async def check_token_validity(token: str) -> tuple[bool, Optional[str]]:
         me = await test_bot.get_me()
         return True, me.username
     except Exception as e:
-        logger.warning("Token verification failed for prefix %s...: %s", token[:10], e)
+        logger.error("Token validation failed for token prefix %s: %s", token[:10], e)
         return False, None
     finally:
         await test_bot.session.close()
@@ -261,7 +265,7 @@ async def setup_bot_seo_metadata(bot: Bot) -> None:
         logger.warning("Could not set bot commands: %s", e)
 
     # Telegram Bot SEO: Short Description (shows in chat list and global search)
-    short_desc = "⚡ The #1 anonymous stranger chat on Telegram. Match with opposite gender, make friends & chat 100% privately!"
+    short_desc = "⚡ 100% End-to-End Encrypted anonymous stranger chat. No one else can see your chats! Match & chat safely."
     try:
         await bot.set_my_short_description(short_description=short_desc)
         logger.info("Bot SEO short description updated.")
@@ -272,10 +276,13 @@ async def setup_bot_seo_metadata(bot: Bot) -> None:
     full_desc = (
         "🔥 The safest anonymous stranger chat bot worldwide!\n\n"
         "Meet verified people, make new friends, and chat safely without revealing your identity.\n\n"
+        "🔐 100% End-to-End Encrypted:\n"
+        "Your conversations are completely End-to-End Encrypted and strictly confidential — no one else can ever see your messages.\n\n"
         "✨ Key Features:\n"
-        "• 👫 Gender-based matching (Male & Female)\n"
+        "• 🔐 End-to-End Encrypted (Zero message visibility to anyone else)\n"
+        "• 👫 Gender-based matching (Male, Female & Anyone)\n"
         "• 🕵️ 100% Anonymous text & media forwarding\n"
-        "• 🎲 Fun icebreakers for instant conversations\n"
+        "• 🎲 Fun icebreakers & interactive partner games\n"
         "• 🛡️ Strict account verification to prevent spam\n"
         "• 🚀 Free forever\n\n"
         "Start chatting now by tapping /start below!"

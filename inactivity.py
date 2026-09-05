@@ -5,7 +5,11 @@ from aiogram import Bot
 import database
 from games import duel_games
 from keyboards import get_partner_disconnected_keyboard
-from quotes import get_random_motivational_quote
+from quotes import (
+    format_chat_duration,
+    get_random_motivational_quote,
+    get_session_elapsed_seconds,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -42,9 +46,12 @@ async def run_inactivity_checker(
                     user2_id,
                 )
 
+                elapsed = get_session_elapsed_seconds(session)
+                dur_str = format_chat_duration(elapsed)
                 quote = get_random_motivational_quote()
                 inactivity_notice = (
                     "⏳ <b>Chat closed due to inactivity.</b>\n\n"
+                    f"⏱️ <b>Chat Duration:</b> <b>{dur_str}</b>\n\n"
                     "✨ <b>Thought of the Moment:</b>\n"
                     f"<i>{quote}</i>\n\n"
                     "Where would you like to go next?"
