@@ -140,6 +140,7 @@ def get_games_menu_keyboard(is_in_chat: bool = False) -> InlineKeyboardMarkup:
                     InlineKeyboardButton(text="🎲 Dice Roll Duel", callback_data="cb_game:duel_dice"),
                 ],
                 [
+                    InlineKeyboardButton(text="🎲 3D Animated Dice", callback_data="cb_game:animated_dice"),
                     InlineKeyboardButton(text="🕹️ Solo Games Menu", callback_data="cb_game:solo_menu"),
                 ],
             ]
@@ -153,6 +154,9 @@ def get_games_menu_keyboard(is_in_chat: bool = False) -> InlineKeyboardMarkup:
             [
                 InlineKeyboardButton(text="✊ Rock-Paper-Scissors", callback_data="cb_game:solo_rps"),
                 InlineKeyboardButton(text="🎲 Lucky Dice Roll", callback_data="cb_game:solo_dice"),
+            ],
+            [
+                InlineKeyboardButton(text="🎲 3D Animated Dice", callback_data="cb_game:animated_dice"),
             ],
         ]
     )

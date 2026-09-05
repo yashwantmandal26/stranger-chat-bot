@@ -1,9 +1,10 @@
 import logging
+import random
 from typing import Any
 from aiogram import F, Router
 from aiogram.exceptions import TelegramAPIError
 from aiogram.filters import Command, CommandStart
-from aiogram.types import CallbackQuery, Message
+from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 
 import account_age
 import config
@@ -456,16 +457,17 @@ async def handle_solo_guess_start(callback: CallbackQuery) -> None:
         return
 
     solo_games.start_guess(callback.from_user.id)
+    guess_text = (
+        "🔢 <b>Guess the Number (0–9)!</b>\n"
+        "━━━━━━━━━━━━━━━━━━━\n"
+        "I'm thinking of a secret digit between <b>0</b> and <b>9</b>.\n"
+        "Tap a number below to make your guess:"
+    )
+    guess_kb = get_number_guess_keyboard(prefix="cb_solo_guess")
     try:
-        await callback.message.edit_text(
-            "🔢 <b>Guess the Number (0–9)!</b>\n"
-            "━━━━━━━━━━━━━━━━━━━\n"
-            "I'm thinking of a secret digit between <b>0</b> and <b>9</b>.\n"
-            "Tap a number below to make your guess:",
-            reply_markup=get_number_guess_keyboard(prefix="cb_solo_guess"),
-        )
-    except Exception as e:
-        logger.warning("Failed to edit solo guess: %s", e)
+        await callback.message.edit_text(guess_text, reply_markup=guess_kb)
+    except Exception:
+        await callback.message.answer(guess_text, reply_markup=guess_kb)
 
 
 @router.callback_query(F.data.startswith("cb_solo_guess:"))
@@ -479,44 +481,47 @@ async def handle_solo_guess_check(callback: CallbackQuery) -> None:
 
     if result == "correct":
         await callback.answer("🎉 Correct! You won!", show_alert=True)
+        win_text = (
+            f"🎉 <b>BULLSEYE!</b>\n"
+            "━━━━━━━━━━━━━━━━━━━\n"
+            f"The secret number was <b>{target}</b>!\n"
+            f"You cracked it in <b>{attempts}</b> attempt(s)! 🏆\n"
+            "━━━━━━━━━━━━━━━━━━━\n"
+            "Play again or choose another game:"
+        )
+        win_kb = get_games_menu_keyboard(is_in_chat=False)
         try:
-            await callback.message.edit_text(
-                f"🎉 <b>BULLSEYE!</b>\n"
-                "━━━━━━━━━━━━━━━━━━━\n"
-                f"The secret number was <b>{target}</b>!\n"
-                f"You cracked it in <b>{attempts}</b> attempt(s)! 🏆\n"
-                "━━━━━━━━━━━━━━━━━━━\n"
-                "Play again or choose another game:",
-                reply_markup=get_games_menu_keyboard(is_in_chat=False),
-            )
-        except Exception as e:
-            logger.warning("Failed to edit guess result: %s", e)
+            await callback.message.edit_text(win_text, reply_markup=win_kb)
+        except Exception:
+            await callback.message.answer(win_text, reply_markup=win_kb)
     elif result == "higher":
         await callback.answer(f"⬆️ Secret number is HIGHER than {guess_digit}!", show_alert=False)
+        high_text = (
+            f"🔢 <b>Guess the Number (0–9)</b>\n"
+            "━━━━━━━━━━━━━━━━━━━\n"
+            f"Your guess: <b>{guess_digit}</b> (Too low! ⬆️)\n"
+            f"Attempts so far: <b>{attempts}</b>\n\n"
+            "Try another digit below:"
+        )
+        high_kb = get_number_guess_keyboard(prefix="cb_solo_guess")
         try:
-            await callback.message.edit_text(
-                f"🔢 <b>Guess the Number (0–9)</b>\n"
-                "━━━━━━━━━━━━━━━━━━━\n"
-                f"Your guess: <b>{guess_digit}</b> (Too low! ⬆️)\n"
-                f"Attempts so far: <b>{attempts}</b>\n\n"
-                "Try another digit below:",
-                reply_markup=get_number_guess_keyboard(prefix="cb_solo_guess"),
-            )
-        except Exception as e:
-            logger.warning("Failed to edit guess higher: %s", e)
+            await callback.message.edit_text(high_text, reply_markup=high_kb)
+        except Exception:
+            await callback.message.answer(high_text, reply_markup=high_kb)
     else:  # lower
         await callback.answer(f"⬇️ Secret number is LOWER than {guess_digit}!", show_alert=False)
+        low_text = (
+            f"🔢 <b>Guess the Number (0–9)</b>\n"
+            "━━━━━━━━━━━━━━━━━━━\n"
+            f"Your guess: <b>{guess_digit}</b> (Too high! ⬇️)\n"
+            f"Attempts so far: <b>{attempts}</b>\n\n"
+            "Try another digit below:"
+        )
+        low_kb = get_number_guess_keyboard(prefix="cb_solo_guess")
         try:
-            await callback.message.edit_text(
-                f"🔢 <b>Guess the Number (0–9)</b>\n"
-                "━━━━━━━━━━━━━━━━━━━\n"
-                f"Your guess: <b>{guess_digit}</b> (Too high! ⬇️)\n"
-                f"Attempts so far: <b>{attempts}</b>\n\n"
-                "Try another digit below:",
-                reply_markup=get_number_guess_keyboard(prefix="cb_solo_guess"),
-            )
-        except Exception as e:
-            logger.warning("Failed to edit guess lower: %s", e)
+            await callback.message.edit_text(low_text, reply_markup=low_kb)
+        except Exception:
+            await callback.message.answer(low_text, reply_markup=low_kb)
 
 
 # --- Solo: Math Puzzle ---
@@ -528,17 +533,18 @@ async def handle_solo_math_start(callback: CallbackQuery) -> None:
         return
 
     puzzle = solo_games.start_math(callback.from_user.id)
+    math_text = (
+        f"🧮 <b>Math Speed Puzzle</b>\n"
+        "━━━━━━━━━━━━━━━━━━━\n"
+        f"Solve: <b>{puzzle.question}</b>\n"
+        "━━━━━━━━━━━━━━━━━━━\n"
+        "Select the correct answer:"
+    )
+    math_kb = get_math_puzzle_keyboard(puzzle.options, prefix="cb_solo_math")
     try:
-        await callback.message.edit_text(
-            f"🧮 <b>Math Speed Puzzle</b>\n"
-            "━━━━━━━━━━━━━━━━━━━\n"
-            f"Solve: <b>{puzzle.question}</b>\n"
-            "━━━━━━━━━━━━━━━━━━━\n"
-            "Select the correct answer:",
-            reply_markup=get_math_puzzle_keyboard(puzzle.options, prefix="cb_solo_math"),
-        )
-    except Exception as e:
-        logger.warning("Failed to edit solo math: %s", e)
+        await callback.message.edit_text(math_text, reply_markup=math_kb)
+    except Exception:
+        await callback.message.answer(math_text, reply_markup=math_kb)
 
 
 @router.callback_query(F.data.startswith("cb_solo_math:"))
@@ -563,17 +569,17 @@ async def handle_solo_math_check(callback: CallbackQuery) -> None:
             [InlineKeyboardButton(text="🎮 Games Menu", callback_data="cb_game:menu")],
         ]
     )
+    math_res_text = (
+        f"🧮 <b>Math Puzzle Result</b>\n"
+        "━━━━━━━━━━━━━━━━━━━\n"
+        f"{status_text}\n"
+        "━━━━━━━━━━━━━━━━━━━\n"
+        "Ready for another one?"
+    )
     try:
-        await callback.message.edit_text(
-            f"🧮 <b>Math Puzzle Result</b>\n"
-            "━━━━━━━━━━━━━━━━━━━\n"
-            f"{status_text}\n"
-            "━━━━━━━━━━━━━━━━━━━\n"
-            "Ready for another one?",
-            reply_markup=next_kb,
-        )
-    except Exception as e:
-        logger.warning("Failed to edit math result: %s", e)
+        await callback.message.edit_text(math_res_text, reply_markup=next_kb)
+    except Exception:
+        await callback.message.answer(math_res_text, reply_markup=next_kb)
 
 
 # --- Solo: Rock Paper Scissors ---
@@ -581,21 +587,25 @@ async def handle_solo_math_check(callback: CallbackQuery) -> None:
 async def handle_solo_rps_start(callback: CallbackQuery) -> None:
     """Prompts move selection for solo RPS."""
     await callback.answer()
-    if callback.message:
-        try:
-            await callback.message.edit_text(
-                "✊ <b>Rock-Paper-Scissors (vs Bot)</b>\n"
-                "━━━━━━━━━━━━━━━━━━━\n"
-                "Choose your move:",
-                reply_markup=get_rps_keyboard(prefix="cb_solo_rps"),
-            )
-        except Exception as e:
-            logger.warning("Failed to edit solo rps: %s", e)
+    if not callback.message:
+        return
+
+    rps_text = (
+        "✊ <b>Rock-Paper-Scissors (vs Bot)</b>\n"
+        "━━━━━━━━━━━━━━━━━━━\n"
+        "Choose your move:"
+    )
+    rps_kb = get_rps_keyboard(prefix="cb_solo_rps")
+    try:
+        await callback.message.edit_text(rps_text, reply_markup=rps_kb)
+    except Exception:
+        await callback.message.answer(rps_text, reply_markup=rps_kb)
 
 
 @router.callback_query(F.data.startswith("cb_solo_rps:"))
 async def handle_solo_rps_play(callback: CallbackQuery) -> None:
     """Plays RPS round against the Bot."""
+    await callback.answer()
     if not callback.message:
         return
 
@@ -604,6 +614,7 @@ async def handle_solo_rps_play(callback: CallbackQuery) -> None:
 
     u_emoji = RPS_EMOJIS.get(user_move, user_move)
     b_emoji = RPS_EMOJIS.get(bot_move, bot_move)
+    round_id = random.randint(100, 999)
 
     if outcome == "win":
         res_text = "🎉 <b>YOU WIN!</b> 🏆"
@@ -618,18 +629,18 @@ async def handle_solo_rps_play(callback: CallbackQuery) -> None:
             [InlineKeyboardButton(text="🎮 Games Menu", callback_data="cb_game:menu")],
         ]
     )
+    result_text = (
+        f"✊ <b>Rock-Paper-Scissors Match</b> (Round #{round_id})\n"
+        "━━━━━━━━━━━━━━━━━━━\n"
+        f"👤 <b>Your Move:</b> {u_emoji}\n"
+        f"🤖 <b>Bot's Move:</b> {b_emoji}\n"
+        "━━━━━━━━━━━━━━━━━━━\n"
+        f"{res_text}"
+    )
     try:
-        await callback.message.edit_text(
-            f"✊ <b>Rock-Paper-Scissors Match</b>\n"
-            "━━━━━━━━━━━━━━━━━━━\n"
-            f"👤 <b>Your Move:</b> {u_emoji}\n"
-            f"🤖 <b>Bot's Move:</b> {b_emoji}\n"
-            "━━━━━━━━━━━━━━━━━━━\n"
-            f"{res_text}",
-            reply_markup=again_kb,
-        )
-    except Exception as e:
-        logger.warning("Failed to edit rps result: %s", e)
+        await callback.message.edit_text(result_text, reply_markup=again_kb)
+    except Exception:
+        await callback.message.answer(result_text, reply_markup=again_kb)
 
 
 # --- Solo: Lucky Dice Roll ---
@@ -641,6 +652,7 @@ async def handle_solo_dice(callback: CallbackQuery) -> None:
         return
 
     u_roll, b_roll, outcome = solo_games.roll_dice()
+    roll_id = random.randint(100, 999)
     if outcome == "win":
         res = "🎉 <b>You rolled higher and won!</b> 🏆"
     elif outcome == "lose":
@@ -650,22 +662,48 @@ async def handle_solo_dice(callback: CallbackQuery) -> None:
 
     dice_kb = InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="🎲 Roll Again", callback_data="cb_game:solo_dice")],
+            [
+                InlineKeyboardButton(text="🎲 Roll Again", callback_data="cb_game:solo_dice"),
+                InlineKeyboardButton(text="🎲 3D Dice", callback_data="cb_game:animated_dice"),
+            ],
             [InlineKeyboardButton(text="🎮 Games Menu", callback_data="cb_game:menu")],
         ]
     )
+    result_text = (
+        f"🎲 <b>Lucky Dice Roll</b> (Roll #{roll_id})\n"
+        "━━━━━━━━━━━━━━━━━━━\n"
+        f"👤 <b>You rolled:</b> 🎲 <b>{u_roll}</b>\n"
+        f"🤖 <b>Bot rolled:</b> 🎲 <b>{b_roll}</b>\n"
+        "━━━━━━━━━━━━━━━━━━━\n"
+        f"{res}"
+    )
     try:
-        await callback.message.edit_text(
-            f"🎲 <b>Lucky Dice Roll</b>\n"
-            "━━━━━━━━━━━━━━━━━━━\n"
-            f"👤 <b>You rolled:</b> 🎲 <b>{u_roll}</b>\n"
-            f"🤖 <b>Bot rolled:</b> 🎲 <b>{b_roll}</b>\n"
-            "━━━━━━━━━━━━━━━━━━━\n"
-            f"{res}",
-            reply_markup=dice_kb,
-        )
-    except Exception as e:
-        logger.warning("Failed to edit dice result: %s", e)
+        await callback.message.edit_text(result_text, reply_markup=dice_kb)
+    except Exception:
+        await callback.message.answer(result_text, reply_markup=dice_kb)
+
+
+@router.callback_query(F.data == "cb_game:animated_dice")
+async def handle_animated_dice(callback: CallbackQuery) -> None:
+    """Sends an authentic animated 3D physics dice."""
+    await callback.answer()
+    if not callback.message:
+        return
+
+    await callback.message.answer("🎲 <b>Rolling 3D Physics Dice...</b>")
+    dice_msg = await callback.message.answer_dice(emoji="🎲")
+    score = dice_msg.dice.value if dice_msg.dice else random.randint(1, 6)
+
+    again_kb = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="🎲 Roll Again", callback_data="cb_game:animated_dice")],
+            [InlineKeyboardButton(text="🎮 Games Menu", callback_data="cb_game:menu")],
+        ]
+    )
+    await callback.message.answer(
+        f"🎯 You rolled a <b>{score}</b>! 🌟",
+        reply_markup=again_kb,
+    )
 
 
 # =========================================================
@@ -673,14 +711,14 @@ async def handle_solo_dice(callback: CallbackQuery) -> None:
 # =========================================================
 @router.callback_query(F.data == "cb_game:duel_math")
 async def handle_duel_math_start(callback: CallbackQuery) -> None:
-    """Launches a live Math Speed Duel between both partners in chat."""
+    """Launches a live Math Speed Duel between both partners in chat, or solo if alone."""
     if not callback.from_user or not callback.message:
         return
 
     tg_id = callback.from_user.id
     session = await database.get_active_session(tg_id)
     if not session:
-        await callback.answer("⚠️ You must be chatting with a partner to duel!", show_alert=True)
+        await handle_solo_math_start(callback)
         return
 
     partner_id = session["user2_id"] if session["user1_id"] == tg_id else session["user1_id"]
@@ -729,13 +767,19 @@ async def handle_duel_math_answer(callback: CallbackQuery) -> None:
 
     if status == "winner":
         await callback.answer("🏆 You answered first and won!", show_alert=True)
+        duel_math_kb = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [InlineKeyboardButton(text="⚡ Play Math Again", callback_data="cb_game:duel_math")],
+                [InlineKeyboardButton(text="🎮 Games Menu", callback_data="cb_game:menu")],
+            ]
+        )
         win_card = (
             "🏆 <b>MATH DUEL COMPLETE!</b>\n"
             "━━━━━━━━━━━━━━━━━━━\n"
             f"✅ Correct Answer: <b>{correct_ans}</b>\n"
             "⚡ <b>Winner:</b> Your partner was quick and solved it first! 🥇\n"
             "━━━━━━━━━━━━━━━━━━━\n"
-            "<i>Tap 🎮 Play Game to challenge again!</i>"
+            "<i>Tap below to play again or open menu:</i>"
         )
         my_win_card = (
             "🏆 <b>MATH DUEL COMPLETE!</b>\n"
@@ -743,15 +787,15 @@ async def handle_duel_math_answer(callback: CallbackQuery) -> None:
             f"✅ Correct Answer: <b>{correct_ans}</b>\n"
             "⚡ <b>Winner:</b> YOU solved it first! 🥇 Great speed!\n"
             "━━━━━━━━━━━━━━━━━━━\n"
-            "<i>Tap 🎮 Play Game to challenge again!</i>"
+            "<i>Tap below to play again or open menu:</i>"
         )
         try:
-            await callback.message.edit_text(my_win_card)
+            await callback.message.edit_text(my_win_card, reply_markup=duel_math_kb)
         except Exception:
-            await callback.message.answer(my_win_card)
+            await callback.message.answer(my_win_card, reply_markup=duel_math_kb)
 
         try:
-            await callback.bot.send_message(chat_id=partner_id, text=win_card)
+            await callback.bot.send_message(chat_id=partner_id, text=win_card, reply_markup=duel_math_kb)
         except Exception as e:
             logger.warning("Failed to notify math duel partner %s: %s", partner_id, e)
 
@@ -765,14 +809,14 @@ async def handle_duel_math_answer(callback: CallbackQuery) -> None:
 
 @router.callback_query(F.data == "cb_game:duel_rps")
 async def handle_duel_rps_start(callback: CallbackQuery) -> None:
-    """Launches a hidden-move RPS duel between both partners."""
+    """Launches a hidden-move RPS duel between both partners, or solo if alone."""
     if not callback.from_user or not callback.message:
         return
 
     tg_id = callback.from_user.id
     session = await database.get_active_session(tg_id)
     if not session:
-        await callback.answer("⚠️ You must be chatting with a partner to duel!", show_alert=True)
+        await handle_solo_rps_start(callback)
         return
 
     partner_id = session["user2_id"] if session["user1_id"] == tg_id else session["user1_id"]
@@ -847,32 +891,39 @@ async def handle_duel_rps_move(callback: CallbackQuery) -> None:
         f"• Player 2: {m2_name}\n"
         "━━━━━━━━━━━━━━━━━━━\n"
         f"{result_title}\n\n"
-        "<i>Tap 🎮 Play Game to challenge again!</i>"
+        "<i>Tap below to play again or open menu:</i>"
+    )
+
+    duel_rps_kb = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="✊ Play RPS Again", callback_data="cb_game:duel_rps")],
+            [InlineKeyboardButton(text="🎮 Games Menu", callback_data="cb_game:menu")],
+        ]
     )
 
     await callback.answer("Round complete!", show_alert=False)
     try:
-        await callback.message.edit_text(results_text)
+        await callback.message.edit_text(results_text, reply_markup=duel_rps_kb)
     except Exception:
-        await callback.message.answer(results_text)
+        await callback.message.answer(results_text, reply_markup=duel_rps_kb)
 
     partner_id = u2 if u1 == tg_id else u1
     try:
-        await callback.bot.send_message(chat_id=partner_id, text=results_text)
+        await callback.bot.send_message(chat_id=partner_id, text=results_text, reply_markup=duel_rps_kb)
     except Exception as e:
         logger.warning("Failed to send RPS result to %s: %s", partner_id, e)
 
 
 @router.callback_query(F.data == "cb_game:duel_guess")
 async def handle_duel_guess_start(callback: CallbackQuery) -> None:
-    """Launches a Number Guess Race between both partners."""
+    """Launches a Number Guess Race between both partners, or solo if alone."""
     if not callback.from_user or not callback.message:
         return
 
     tg_id = callback.from_user.id
     session = await database.get_active_session(tg_id)
     if not session:
-        await callback.answer("⚠️ You must be chatting with a partner to duel!", show_alert=True)
+        await handle_solo_guess_start(callback)
         return
 
     partner_id = session["user2_id"] if session["user1_id"] == tg_id else session["user1_id"]
@@ -921,13 +972,19 @@ async def handle_duel_guess_check(callback: CallbackQuery) -> None:
         await callback.answer("🎉 Correct! You won the race!", show_alert=True)
         partner_id = session["user2_id"] if session["user1_id"] == tg_id else session["user1_id"]
 
+        duel_guess_kb = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [InlineKeyboardButton(text="🔢 Play Guess Again", callback_data="cb_game:duel_guess")],
+                [InlineKeyboardButton(text="🎮 Games Menu", callback_data="cb_game:menu")],
+            ]
+        )
         my_win_msg = (
             "🎉 <b>BULLSEYE! YOU WON!</b>\n"
             "━━━━━━━━━━━━━━━━━━━\n"
             f"The secret number was <b>{target}</b>!\n"
             "You guessed it first and won the race! 🥇\n"
             "━━━━━━━━━━━━━━━━━━━\n"
-            "<i>Tap 🎮 Play Game to challenge again!</i>"
+            "<i>Tap below to play again or open menu:</i>"
         )
         their_win_msg = (
             "🎉 <b>RACE OVER!</b>\n"
@@ -935,15 +992,15 @@ async def handle_duel_guess_check(callback: CallbackQuery) -> None:
             f"The secret number was <b>{target}</b>!\n"
             "Your partner guessed it first and won the race! 🥇\n"
             "━━━━━━━━━━━━━━━━━━━\n"
-            "<i>Tap 🎮 Play Game to challenge again!</i>"
+            "<i>Tap below to play again or open menu:</i>"
         )
         try:
-            await callback.message.edit_text(my_win_msg)
+            await callback.message.edit_text(my_win_msg, reply_markup=duel_guess_kb)
         except Exception:
-            await callback.message.answer(my_win_msg)
+            await callback.message.answer(my_win_msg, reply_markup=duel_guess_kb)
 
         try:
-            await callback.bot.send_message(chat_id=partner_id, text=their_win_msg)
+            await callback.bot.send_message(chat_id=partner_id, text=their_win_msg, reply_markup=duel_guess_kb)
         except Exception as e:
             logger.warning("Failed to notify guess duel partner %s: %s", partner_id, e)
 
@@ -957,14 +1014,14 @@ async def handle_duel_guess_check(callback: CallbackQuery) -> None:
 
 @router.callback_query(F.data == "cb_game:duel_dice")
 async def handle_duel_dice(callback: CallbackQuery) -> None:
-    """Rolls a lucky dice for both partners in active chat."""
+    """Rolls a lucky dice for both partners in active chat, or solo if alone."""
     if not callback.from_user or not callback.message:
         return
 
     tg_id = callback.from_user.id
     session = await database.get_active_session(tg_id)
     if not session:
-        await callback.answer("⚠️ You must be chatting with a partner to duel!", show_alert=True)
+        await handle_solo_dice(callback)
         return
 
     partner_id = session["user2_id"] if session["user1_id"] == tg_id else session["user1_id"]
@@ -972,6 +1029,7 @@ async def handle_duel_dice(callback: CallbackQuery) -> None:
 
     r_me = random.randint(1, 6)
     r_them = random.randint(1, 6)
+    duel_id = random.randint(100, 999)
 
     if r_me > r_them:
         res_me = "🎉 <b>YOU WON!</b> (Your roll was higher) 🏆"
@@ -984,31 +1042,38 @@ async def handle_duel_dice(callback: CallbackQuery) -> None:
         res_them = res_me
 
     msg_me = (
-        "🎲 <b>LUCKY DICE DUEL!</b>\n"
+        f"🎲 <b>LUCKY DICE DUEL!</b> (Duel #{duel_id})\n"
         "━━━━━━━━━━━━━━━━━━━\n"
         f"👤 <b>Your Roll:</b> 🎲 <b>{r_me}</b>\n"
         f"👤 <b>Partner's Roll:</b> 🎲 <b>{r_them}</b>\n"
         "━━━━━━━━━━━━━━━━━━━\n"
         f"{res_me}\n\n"
-        "<i>Tap 🎮 Play Game to roll again!</i>"
+        "<i>Tap 🎲 Roll Again to roll another pair!</i>"
     )
     msg_them = (
-        "🎲 <b>LUCKY DICE DUEL!</b>\n"
+        f"🎲 <b>LUCKY DICE DUEL!</b> (Duel #{duel_id})\n"
         "━━━━━━━━━━━━━━━━━━━\n"
         f"👤 <b>Your Roll:</b> 🎲 <b>{r_them}</b>\n"
         f"👤 <b>Partner's Roll:</b> 🎲 <b>{r_me}</b>\n"
         "━━━━━━━━━━━━━━━━━━━\n"
         f"{res_them}\n\n"
-        "<i>Tap 🎮 Play Game to roll again!</i>"
+        "<i>Tap 🎲 Roll Again to roll another pair!</i>"
+    )
+
+    duel_dice_kb = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="🎲 Roll Again", callback_data="cb_game:duel_dice")],
+            [InlineKeyboardButton(text="🎮 Games Menu", callback_data="cb_game:menu")],
+        ]
     )
 
     try:
-        await callback.message.edit_text(msg_me)
+        await callback.message.edit_text(msg_me, reply_markup=duel_dice_kb)
     except Exception:
-        await callback.message.answer(msg_me)
+        await callback.message.answer(msg_me, reply_markup=duel_dice_kb)
 
     try:
-        await callback.bot.send_message(chat_id=partner_id, text=msg_them)
+        await callback.bot.send_message(chat_id=partner_id, text=msg_them, reply_markup=duel_dice_kb)
     except Exception as e:
         logger.warning("Failed to send dice duel to %s: %s", partner_id, e)
 
