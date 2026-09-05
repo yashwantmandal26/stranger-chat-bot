@@ -2,10 +2,12 @@ import asyncio
 import logging
 import sys
 from typing import Optional
+from aiohttp import web
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from aiogram.types import BotCommand, ErrorEvent
+from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
 
 import config
 import database
@@ -24,6 +26,14 @@ logger = logging.getLogger(__name__)
 
 # Global background task reference for inactivity cleanup
 inactivity_task: Optional[asyncio.Task] = None
+
+
+async def health_check(request: web.Request) -> web.Response:
+    """
+    Health check route for Render to keep the free server running.
+    Returns plain text: 'Bot is alive!'
+    """
+    return web.Response(text="Bot is alive!", content_type="text/plain")
 
 
 async def set_bot_commands(bot: Bot) -> None:
@@ -45,7 +55,13 @@ async def set_bot_commands(bot: Bot) -> None:
 
 
 async def on_startup(bot: Bot) -> None:
-    """Executes startup actions: DB initialization, command registration, and background tasks."""
+    """
+    Executes startup actions:
+    1. Initializes SQLite database.
+    2. Registers Telegram command menu.
+    3. Configures webhook with Telegram if WEBHOOK_URL is set.
+    4. Launches the 10-minute inactivity cleaner background task.
+    """
     global inactivity_task
     logger.info("Initializing database...")
     await database.init_db()
@@ -53,7 +69,29 @@ async def on_startup(bot: Bot) -> None:
     # Set up command menu in Telegram
     await set_bot_commands(bot)
 
-    # Start the 10-minute inactivity session cleaner
+    # Register webhook with Telegram if WEBHOOK_URL is configured
+    webhook_url = config.WEBHOOK_URL
+    if webhook_url:
+        target_webhook = (
+            webhook_url
+            if webhook_url.endswith("/webhook")
+            else f"{webhook_url.rstrip('/')}/webhook"
+        )
+        logger.info("Registering webhook with Telegram: %s", target_webhook)
+        await bot.set_webhook(
+            url=target_webhook,
+            drop_pending_updates=True,
+            allowed_updates=handlers.router.resolve_used_update_types(),
+        )
+        webhook_info = await bot.get_webhook_info()
+        logger.info("Telegram Webhook registered successfully! Active URL: %s", webhook_info.url)
+    else:
+        logger.warning(
+            "WEBHOOK_URL is not set in environment. Webhook was not registered with Telegram. "
+            "On Render, set WEBHOOK_URL to your service URL (e.g., https://your-app.onrender.com)."
+        )
+
+    # Start the 10-minute inactivity session cleaner background task
     inactivity_task = asyncio.create_task(
         run_inactivity_checker(bot, check_interval_seconds=30, timeout_minutes=10)
     )
@@ -67,7 +105,7 @@ async def on_startup(bot: Bot) -> None:
 
 
 async def on_shutdown(bot: Bot) -> None:
-    """Handles graceful shutdown: cancels background tasks and flushes connections."""
+    """Handles graceful shutdown: cancels background tasks and closes bot session."""
     global inactivity_task
     logger.info("Shutting down bot...")
     if inactivity_task and not inactivity_task.done():
@@ -75,11 +113,17 @@ async def on_shutdown(bot: Bot) -> None:
         try:
             await inactivity_task
         except asyncio.CancelledError:
-            logger.info("Inactivity worker cancelled cleanly.")
+            logger.info("Inactivity cleaner stopped cleanly.")
+
+    try:
+        await bot.session.close()
+        logger.info("Bot session closed.")
+    except Exception as e:
+        logger.warning("Error while closing bot session: %s", e)
 
 
-async def main() -> None:
-    """Application entry point."""
+def main() -> None:
+    """Application entry point: sets up aiohttp web server with aiogram webhooks."""
     if not config.BOT_TOKEN:
         logger.error(
             "ERROR: BOT_TOKEN is not configured! Please provide your Telegram Bot Token in the .env file."
@@ -120,24 +164,29 @@ async def main() -> None:
     # Register routers
     dp.include_router(handlers.router)
 
-    # Register lifecycle hooks
+    # Register dispatcher lifecycle hooks
     dp.startup.register(on_startup)
     dp.shutdown.register(on_shutdown)
 
-    logger.info("Starting polling...")
-    try:
-        await bot.delete_webhook(drop_pending_updates=True)
-        await dp.start_polling(
-            bot,
-            allowed_updates=dp.resolve_used_update_types(),
-        )
-    finally:
-        logger.info("Closing bot session...")
-        await bot.session.close()
+    # 1. Create aiohttp web application
+    app = web.Application()
+
+    # 2. Add GET / health check route for Render
+    app.router.add_get("/", health_check)
+
+    # 3. Add POST /webhook route for Telegram updates
+    SimpleRequestHandler(dispatcher=dp, bot=bot).register(app, path="/webhook")
+
+    # 4. Integrate aiogram dispatcher lifecycle with aiohttp
+    setup_application(app, dp, bot=bot)
+
+    # 5. Run the web server on 0.0.0.0:$PORT
+    logger.info("Starting aiohttp web server on 0.0.0.0:%s", config.PORT)
+    web.run_app(app, host="0.0.0.0", port=config.PORT)
 
 
 if __name__ == "__main__":
     try:
-        asyncio.run(main())
+        main()
     except (KeyboardInterrupt, SystemExit):
-        logger.info("Bot stopped.")
+        logger.info("Application exited.")

@@ -78,11 +78,30 @@ DB_PATH=stranger_chat.db
 MIN_ACCOUNT_AGE_DAYS=30
 ```
 
-### 4. Run the Bot
+### 4. Run the Bot Locally
 
 ```bash
 python main.py
 ```
+
+---
+
+## ☁️ Deploy on Render (Free Web Service)
+
+Render's Web Services are **100% free** and act as an HTTP web server:
+
+1. Create a new **Web Service** on [Render](https://dashboard.render.com/).
+2. Connect your GitHub repository: `https://github.com/yashwantmandal26/stranger-chat-bot`.
+3. Configure settings:
+   - **Environment**: `Python`
+   - **Build Command**: `pip install -r requirements.txt`
+   - **Start Command**: `python main.py`
+4. Add **Environment Variables** in the Render Dashboard:
+   - `BOT_TOKEN`: Your Telegram bot token
+   - `ADMIN_ID`: Your numeric Telegram ID (`8548848788`)
+   - `WEBHOOK_URL`: `https://<your-service-name>.onrender.com`
+   - `PORT`: (automatically set by Render, default: `8080`)
+5. Click **Deploy Web Service**! Render will build the app, start the aiohttp server, verify the `GET /` health check ("Bot is alive!"), and register the webhook with Telegram.
 
 ---
 
