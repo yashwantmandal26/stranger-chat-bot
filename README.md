@@ -119,12 +119,13 @@ Render's Web Services are **100% free** and act as an HTTP web server:
 
 | Command | Quick Button | Description |
 |---|---|---|
-| `/find` | `🔍 Find Stranger` | Search for an opposite-gender partner |
+| `/find` | `🔍 Find Stranger` | Search for a partner (opposite gender preferred, fallback to any) |
 | `/next` | `⏭️ Next Stranger` | Skip current stranger and find a new partner |
 | `/stop` | `⏹️ End Chat` | End active chat or cancel queue search |
 | `/icebreaker` | `🎲 Send Icebreaker` | Post a fun conversation starter into chat |
 | `/profile` | `👤 Profile` | View your anonymous profile card & stats |
-| `/gender` | Inline Button | View or change your gender preference |
+| `/gender` | Inline Button | View or change gender (Male, Female, Prefer not to say) |
+| `/age` | Inline Button | View or change age range (Below 18, 18–25, 25–35, 40+) |
 | `/report` | `🚨 Report User` | Report partner for inappropriate behavior (auto-ban) |
 | `/invite` | `🚀 Invite Friends` | Share the bot with friends via Telegram |
 | `/help` | `❓ Help` | Display command guide and community rules |

@@ -57,6 +57,8 @@ async def init_db(db_path: Optional[str] = None) -> None:
             user_columns = [row[1] for row in await cursor.fetchall()]
         if "chat_count" not in user_columns:
             await db.execute("ALTER TABLE users ADD COLUMN chat_count INTEGER DEFAULT 0;")
+        if "age_range" not in user_columns:
+            await db.execute("ALTER TABLE users ADD COLUMN age_range TEXT DEFAULT 'unknown';")
 
         # Ensure last_activity_at column exists if table already existed
         async with db.execute("PRAGMA table_info(chat_sessions);") as cursor:
@@ -122,11 +124,21 @@ async def upsert_user(
 
 
 async def update_user_gender(tg_id: int, gender: str) -> None:
-    """Updates user's gender ('male', 'female', 'unknown')."""
+    """Updates user's gender ('male', 'female', 'prefer_not_to_say', 'unknown')."""
     async with aiosqlite.connect(config.DB_PATH) as db:
         await db.execute(
             "UPDATE users SET gender = ? WHERE tg_id = ?",
             (gender, tg_id),
+        )
+        await db.commit()
+
+
+async def update_user_age_range(tg_id: int, age_range: str) -> None:
+    """Updates user's age range ('below_18', '18-25', '25-35', '40+')."""
+    async with aiosqlite.connect(config.DB_PATH) as db:
+        await db.execute(
+            "UPDATE users SET age_range = ? WHERE tg_id = ?",
+            (age_range, tg_id),
         )
         await db.commit()
 
@@ -377,6 +389,26 @@ async def get_stats() -> dict[str, int]:
             row = await cursor.fetchone()
             female_users = row[0] if row else 0
 
+        async with db.execute("SELECT COUNT(*) FROM users WHERE gender = 'prefer_not_to_say';") as cursor:
+            row = await cursor.fetchone()
+            prefer_not_to_say_users = row[0] if row else 0
+
+        async with db.execute("SELECT COUNT(*) FROM users WHERE age_range = 'below_18';") as cursor:
+            row = await cursor.fetchone()
+            age_below_18 = row[0] if row else 0
+
+        async with db.execute("SELECT COUNT(*) FROM users WHERE age_range = '18-25';") as cursor:
+            row = await cursor.fetchone()
+            age_18_25 = row[0] if row else 0
+
+        async with db.execute("SELECT COUNT(*) FROM users WHERE age_range = '25-35';") as cursor:
+            row = await cursor.fetchone()
+            age_25_35 = row[0] if row else 0
+
+        async with db.execute("SELECT COUNT(*) FROM users WHERE age_range = '40+';") as cursor:
+            row = await cursor.fetchone()
+            age_40_plus = row[0] if row else 0
+
         async with db.execute("SELECT COUNT(*) FROM chat_sessions;") as cursor:
             row = await cursor.fetchone()
             active_chats = row[0] if row else 0
@@ -385,6 +417,11 @@ async def get_stats() -> dict[str, int]:
         "total_users": total_users,
         "male_users": male_users,
         "female_users": female_users,
+        "prefer_not_to_say_users": prefer_not_to_say_users,
+        "age_below_18": age_below_18,
+        "age_18_25": age_18_25,
+        "age_25_35": age_25_35,
+        "age_40_plus": age_40_plus,
         "active_chats": active_chats,
     }
 

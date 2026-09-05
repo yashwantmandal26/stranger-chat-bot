@@ -247,6 +247,7 @@ async def setup_bot_seo_metadata(bot: Bot) -> None:
         BotCommand(command="icebreaker", description="🎲 Get a fun conversation starter"),
         BotCommand(command="profile", description="👤 View your anonymous profile card"),
         BotCommand(command="gender", description="👤 Change your gender preference"),
+        BotCommand(command="age", description="🎂 Set or change your age range"),
         BotCommand(command="report", description="🚨 Report an inappropriate user"),
         BotCommand(command="invite", description="🚀 Share the bot with friends"),
         BotCommand(command="help", description="❓ Command guide & community rules"),

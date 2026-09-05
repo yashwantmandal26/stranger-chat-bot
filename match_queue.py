@@ -15,12 +15,14 @@ class QueueUser:
     gender: str
     is_premium: bool
     joined_at: float
+    age_range: str = "unknown"
 
 
 class MatchQueueManager:
     """
     Thread-safe & asyncio-safe virtual queue for Stranger Chat.
-    Handles opposite-gender matching with priority for premium users.
+    Handles opposite-gender matching with fallback to any gender,
+    with priority for premium users and wait time.
     """
 
     def __init__(self) -> None:
@@ -49,18 +51,21 @@ class MatchQueueManager:
         tg_id: int,
         gender: str,
         is_premium: bool,
+        age_range: str = "unknown",
     ) -> tuple[Optional[int], bool]:
         """
-        Attempts to match the user with an opposite-gender user waiting in the queue.
-        If a match is found:
-          - The matched user is removed from the queue.
-          - An active chat session is persisted in SQLite.
-          - Returns (partner_tg_id, True).
-        If no match is found:
-          - The user is enqueued.
-          - Returns (None, False).
+        Attempts to match the user with a partner waiting in the queue.
+        1. If user specified 'male' or 'female', tries opposite-gender candidates first.
+        2. If no opposite-gender candidates are found (or user is 'prefer_not_to_say'),
+           falls back to matching with ANY available user in the queue.
+        3. If no users are waiting in the queue, enqueues this user.
         """
-        target_gender = "female" if gender.lower() == "male" else "male"
+        gender_norm = gender.lower().strip()
+        target_gender = (
+            "female"
+            if gender_norm == "male"
+            else ("male" if gender_norm == "female" else None)
+        )
 
         async with self._lock:
             # Check if user is already waiting
@@ -68,17 +73,35 @@ class MatchQueueManager:
                 logger.info("User %s is already in queue.", tg_id)
                 return None, False
 
-            # Find opposite-gender candidates
-            candidates: list[QueueUser] = [
-                u
-                for u in self._queue.values()
-                if u.gender.lower() == target_gender and u.tg_id != tg_id
-            ]
+            candidates: list[QueueUser] = []
+
+            # 1. Try finding opposite-gender candidates first
+            if target_gender:
+                candidates = [
+                    u
+                    for u in self._queue.values()
+                    if u.gender.lower() == target_gender and u.tg_id != tg_id
+                ]
+
+            # 2. Fallback: If opposite gender is not found, match with ANY available user
+            if not candidates:
+                candidates = [
+                    u
+                    for u in self._queue.values()
+                    if u.tg_id != tg_id
+                ]
 
             if candidates:
-                # Priority: Premium first (False > True inverted, so not is_premium -> 0 for True, 1 for False),
-                # followed by oldest wait time (joined_at ascending)
-                candidates.sort(key=lambda u: (not u.is_premium, u.joined_at))
+                # Priority: Premium first, same age range preference, oldest wait time
+                candidates.sort(
+                    key=lambda u: (
+                        not u.is_premium,
+                        (u.age_range != age_range)
+                        if (age_range != "unknown" and u.age_range != "unknown")
+                        else False,
+                        u.joined_at,
+                    )
+                )
                 matched_user = candidates[0]
 
                 # Remove matched user from queue
@@ -87,12 +110,14 @@ class MatchQueueManager:
                 # Create persistent session in SQLite
                 await database.create_chat_session(tg_id, matched_user.tg_id)
                 logger.info(
-                    "Matched user %s (%s, prem=%s) with %s (%s, prem=%s). Session created.",
+                    "Matched user %s (%s, age=%s, prem=%s) with %s (%s, age=%s, prem=%s). Session created.",
                     tg_id,
-                    gender,
+                    gender_norm,
+                    age_range,
                     is_premium,
                     matched_user.tg_id,
                     matched_user.gender,
+                    matched_user.age_range,
                     matched_user.is_premium,
                 )
                 return matched_user.tg_id, True
@@ -100,14 +125,16 @@ class MatchQueueManager:
             # No match available yet; add to queue
             self._queue[tg_id] = QueueUser(
                 tg_id=tg_id,
-                gender=gender.lower(),
+                gender=gender_norm,
                 is_premium=is_premium,
                 joined_at=time.time(),
+                age_range=age_range,
             )
             logger.info(
-                "Enqueued user %s (%s, prem=%s). Queue size: %d",
+                "Enqueued user %s (%s, age=%s, prem=%s). Queue size: %d",
                 tg_id,
-                gender,
+                gender_norm,
+                age_range,
                 is_premium,
                 len(self._queue),
             )
@@ -119,11 +146,15 @@ class MatchQueueManager:
             total = len(self._queue)
             males = sum(1 for u in self._queue.values() if u.gender == "male")
             females = sum(1 for u in self._queue.values() if u.gender == "female")
+            prefer_not_to_say = sum(
+                1 for u in self._queue.values() if u.gender == "prefer_not_to_say"
+            )
             premiums = sum(1 for u in self._queue.values() if u.is_premium)
             return {
                 "total": total,
                 "males": males,
                 "females": females,
+                "prefer_not_to_say": prefer_not_to_say,
                 "premiums": premiums,
             }
 

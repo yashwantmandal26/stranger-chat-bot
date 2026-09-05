@@ -39,7 +39,40 @@ def get_gender_keyboard() -> InlineKeyboardMarkup:
             [
                 InlineKeyboardButton(text="👨 Male", callback_data="cb_gender:male"),
                 InlineKeyboardButton(text="👩 Female", callback_data="cb_gender:female"),
-            ]
+            ],
+            [
+                InlineKeyboardButton(
+                    text="🎭 Prefer not to say", callback_data="cb_gender:prefer_not_to_say"
+                ),
+            ],
+        ]
+    )
+
+
+def get_age_keyboard() -> InlineKeyboardMarkup:
+    """Returns inline keyboard for age range selection."""
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text="🐣 Below 18", callback_data="cb_age:below_18"),
+                InlineKeyboardButton(text="✨ 18–25", callback_data="cb_age:18-25"),
+            ],
+            [
+                InlineKeyboardButton(text="💼 25–35", callback_data="cb_age:25-35"),
+                InlineKeyboardButton(text="🌟 40+", callback_data="cb_age:40+"),
+            ],
+        ]
+    )
+
+
+def get_profile_keyboard() -> InlineKeyboardMarkup:
+    """Returns inline keyboard for updating profile attributes."""
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text="👤 Change Gender", callback_data="cb_open_gender"),
+                InlineKeyboardButton(text="🎂 Change Age", callback_data="cb_open_age"),
+            ],
         ]
     )
 
@@ -65,6 +98,9 @@ def get_welcome_keyboard() -> InlineKeyboardMarkup:
             ],
             [
                 InlineKeyboardButton(text="👤 Set Gender", callback_data="cb_open_gender"),
+                InlineKeyboardButton(text="🎂 Set Age", callback_data="cb_open_age"),
+            ],
+            [
                 InlineKeyboardButton(text="🎲 Random Icebreaker", callback_data="cb_get_icebreaker"),
             ],
         ]

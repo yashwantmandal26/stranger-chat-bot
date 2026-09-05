@@ -10,10 +10,12 @@ import config
 import database
 import icebreakers
 from keyboards import (
+    get_age_keyboard,
     get_chat_reply_keyboard,
     get_gender_keyboard,
     get_idle_reply_keyboard,
     get_invite_keyboard,
+    get_profile_keyboard,
     get_search_keyboard,
     get_welcome_keyboard,
 )
@@ -26,12 +28,13 @@ router = Router(name="base_handlers")
 HELP_TEXT = (
     "📖 <b>Stranger Chat Bot — Command Guide</b>\n"
     "━━━━━━━━━━━━━━━━━━━\n"
-    "• <b>/find</b> — 🔍 Search for an opposite-gender stranger\n"
+    "• <b>/find</b> — 🔍 Search for a partner (opposite gender preferred)\n"
     "• <b>/next</b> — ⏭️ Skip current stranger & find someone new\n"
     "• <b>/stop</b> — ⏹️ End active chat or cancel queue search\n"
     "• <b>/icebreaker</b> — 🎲 Send a fun conversation starter\n"
     "• <b>/profile</b> — 👤 View your anonymous profile card\n"
     "• <b>/gender</b> — 👤 View or change your gender preference\n"
+    "• <b>/age</b> — 🎂 View or change your age range\n"
     "• <b>/report</b> — 🚨 Report inappropriate partner\n"
     "• <b>/invite</b> — 🚀 Share the bot with your friends\n"
     "• <b>/help</b> — ❓ Show this help guide\n"
@@ -39,6 +42,48 @@ HELP_TEXT = (
     "━━━━━━━━━━━━━━━━━━━\n"
     "🛡️ <i>All chats are 100% anonymous. Be respectful and have fun!</i>"
 )
+
+
+def format_gender_display(gender: Any) -> str:
+    """Formats gender string into an aesthetic badge with emoji."""
+    g = str(gender or "").lower().strip()
+    if g == "male":
+        return "Male 👨"
+    elif g == "female":
+        return "Female 👩"
+    elif g == "prefer_not_to_say":
+        return "Prefer not to say 🎭"
+    return "Not specified 👤"
+
+
+def format_age_display(age_range: Any) -> str:
+    """Formats age range string into an aesthetic badge with emoji."""
+    a = str(age_range or "").lower().strip()
+    if a == "below_18":
+        return "Below 18 🐣"
+    elif a in ("18-25", "18_25"):
+        return "18–25 ✨"
+    elif a in ("25-35", "25_35"):
+        return "25–35 💼"
+    elif a in ("40+", "40_plus", "40"):
+        return "40+ 🌟"
+    return "Not specified"
+
+
+def get_match_found_text(partner_gender: Any, partner_age: Any) -> str:
+    """Returns aesthetic match notification card detailing partner's gender & age."""
+    g_display = format_gender_display(partner_gender)
+    a_display = format_age_display(partner_age)
+    return (
+        "🎉 <b>MATCH FOUND!</b>\n"
+        "━━━━━━━━━━━━━━━━━━━\n"
+        f"👤 <b>Partner:</b> {g_display}\n"
+        f"🎂 <b>Age:</b> {a_display}\n"
+        "🎭 <b>Identity:</b> 100% Anonymous & Private\n"
+        "⚡ <b>Quick Actions:</b> Tap buttons below or send a message!\n"
+        "━━━━━━━━━━━━━━━━━━━\n"
+        "<i>Say hello 👋 or tap 🎲 Send Icebreaker to start!</i>"
+    )
 
 
 async def get_or_register_user(from_user) -> tuple[dict[str, Any], bool]:
@@ -99,11 +144,20 @@ async def handle_start(message: Message) -> None:
 
     name_display = f" <b>{from_user.first_name}</b>" if from_user.first_name else ""
     user_gender = db_user.get("gender", "unknown")
-    gender_emoji = "👨" if user_gender.lower() == "male" else "👩" if user_gender.lower() == "female" else "❓"
+    user_age = db_user.get("age_range", "unknown")
+
+    gender_display = format_gender_display(user_gender)
+    age_display = format_age_display(user_age)
+
     gender_status = (
-        f"👤 <b>Gender:</b> {user_gender.title()} {gender_emoji}\n"
-        if user_gender in ("male", "female")
+        f"👤 <b>Gender:</b> {gender_display}\n"
+        if user_gender in ("male", "female", "prefer_not_to_say")
         else "👤 <b>Gender:</b> <i>Not set (tap Set Gender below)</i>\n"
+    )
+    age_status = (
+        f"🎂 <b>Age Range:</b> {age_display}\n"
+        if user_age in ("below_18", "18-25", "25-35", "40+")
+        else "🎂 <b>Age Range:</b> <i>Not set (tap Set Age below)</i>\n"
     )
 
     welcome_text = (
@@ -117,6 +171,7 @@ async def handle_start(message: Message) -> None:
         "• Strictly no NSFW, explicit, or illegal content.\n"
         "⚠️ <i>Violations result in an immediate permanent ban.</i>\n\n"
         f"{gender_status}"
+        f"{age_status}"
         "━━━━━━━━━━━━━━━━━━━\n"
         "👉 <i>Tap <b>🔍 Find a Stranger</b> to start chatting!</i>"
     )
@@ -166,7 +221,7 @@ async def handle_invite_command(message: Message) -> None:
 
 @router.message(Command("stats"))
 async def handle_stats_command(message: Message) -> None:
-    """Admin-only dashboard command showing user counts, active chats, and queue status."""
+    """Admin-only dashboard command showing user counts, age demographics, active chats, and queue status."""
     from_user = message.from_user
     if not from_user:
         return
@@ -183,14 +238,20 @@ async def handle_stats_command(message: Message) -> None:
         "━━━━━━━━━━━━━━━━━━━\n"
         "👥 <b>User Statistics:</b>\n"
         f"• Total Users: <b>{db_stats['total_users']}</b>\n"
-        f"• Male Users: <b>{db_stats['male_users']}</b>\n"
-        f"• Female Users: <b>{db_stats['female_users']}</b>\n\n"
+        f"• Male: <b>{db_stats['male_users']}</b> | Female: <b>{db_stats['female_users']}</b>\n"
+        f"• Prefer Not to Say: <b>{db_stats.get('prefer_not_to_say_users', 0)}</b>\n\n"
+        "🎂 <b>Age Demographics:</b>\n"
+        f"• Below 18: <b>{db_stats.get('age_below_18', 0)}</b>\n"
+        f"• 18–25: <b>{db_stats.get('age_18_25', 0)}</b>\n"
+        f"• 25–35: <b>{db_stats.get('age_25_35', 0)}</b>\n"
+        f"• 40+: <b>{db_stats.get('age_40_plus', 0)}</b>\n\n"
         "💬 <b>Chats & Activity:</b>\n"
         f"• Active Chat Sessions: <b>{db_stats['active_chats']}</b>\n\n"
         "⏳ <b>Matchmaking Queue:</b>\n"
         f"• Total Waiting: <b>{queue_stats['total']}</b>\n"
         f"• Males in Queue: <b>{queue_stats['males']}</b>\n"
         f"• Females in Queue: <b>{queue_stats['females']}</b>\n"
+        f"• Prefer Not to Say: <b>{queue_stats.get('prefer_not_to_say', 0)}</b>\n"
         f"• VIP Premium Waiting: <b>{queue_stats['premiums']}</b>\n"
         "━━━━━━━━━━━━━━━━━━━"
     )
@@ -212,8 +273,8 @@ async def handle_profile_command(message: Message) -> None:
         return
 
     _, age_days, _ = account_age.check_account_age(from_user.id)
-    user_gender = db_user.get("gender", "unknown").title()
-    gender_emoji = "👨" if user_gender.lower() == "male" else "👩" if user_gender.lower() == "female" else "❓"
+    user_gender = format_gender_display(db_user.get("gender"))
+    user_age = format_age_display(db_user.get("age_range"))
     is_premium = await database.is_premium_active(from_user.id)
     plan_badge = "⭐ VIP Member (Priority Queue)" if is_premium else "Standard Member (Free)"
     chats_count = db_user.get("chat_count", 0)
@@ -224,15 +285,16 @@ async def handle_profile_command(message: Message) -> None:
         "👤 <b>Your Stranger Chat Profile</b>\n"
         "━━━━━━━━━━━━━━━━━━━\n"
         f"🆔 <b>Anonymous ID:</b> <code>#SC-{str(from_user.id)[-6:]}</code>\n"
-        f"⚧️ <b>Gender:</b> {user_gender} {gender_emoji}\n"
+        f"⚧️ <b>Gender:</b> {user_gender}\n"
+        f"🎂 <b>Age Range:</b> {user_age}\n"
         f"⭐ <b>Membership:</b> {plan_badge}\n"
         f"⏳ <b>Account Age:</b> ~{age_days} days (Verified ✅)\n"
         f"💬 <b>Chats Completed:</b> {chats_count}\n"
         f"🛡️ <b>Reputation:</b> {reputation}\n"
         "━━━━━━━━━━━━━━━━━━━\n"
-        "<i>To change your gender preference, type /gender or tap below:</i>"
+        "<i>Update your preferences anytime using buttons below:</i>"
     )
-    await message.answer(profile_card, reply_markup=get_gender_keyboard())
+    await message.answer(profile_card, reply_markup=get_profile_keyboard())
 
 
 @router.message(Command("icebreaker"))
@@ -300,7 +362,7 @@ async def handle_gender_command(message: Message) -> None:
         await message.answer("⛔ Your account is suspended.")
         return
 
-    current_gender = db_user.get("gender", "unknown").title()
+    current_gender = format_gender_display(db_user.get("gender"))
     await message.answer(
         f"👤 <b>Gender Preference</b>\n"
         "━━━━━━━━━━━━━━━━━━━\n"
@@ -313,12 +375,12 @@ async def handle_gender_command(message: Message) -> None:
 
 @router.callback_query(F.data == "cb_open_gender")
 async def handle_open_gender_callback(callback: CallbackQuery) -> None:
-    """Opens the gender selection keyboard from the welcome message."""
+    """Opens the gender selection keyboard from the welcome or profile message."""
     await callback.answer()
     if callback.message:
         await callback.message.answer(
-            "👤 <b>Please select your gender:</b>\n"
-            "We match you with the opposite gender.",
+            "👤 <b>Please select your gender preference:</b>\n"
+            "Opposite gender is preferred during matching.",
             reply_markup=get_gender_keyboard(),
         )
 
@@ -332,21 +394,101 @@ async def handle_gender_callback(callback: CallbackQuery) -> None:
     tg_id = callback.from_user.id
     selected_gender = callback.data.split(":")[1]
 
-    if selected_gender not in ("male", "female"):
+    if selected_gender not in ("male", "female", "prefer_not_to_say"):
         await callback.answer("Invalid selection.", show_alert=True)
         return
 
     await database.update_user_gender(tg_id, selected_gender)
-    await callback.answer(f"Gender updated to {selected_gender.title()}!")
+    gender_badge = format_gender_display(selected_gender)
+    await callback.answer(f"Gender set to {gender_badge}!")
 
-    emoji = "👨" if selected_gender == "male" else "👩"
+    # Check if age range is set; if not, seamlessly prompt for age range next
+    user_data = await database.get_user(tg_id) or {}
+    current_age = user_data.get("age_range", "unknown")
+
+    if current_age not in ("below_18", "18-25", "25-35", "40+"):
+        try:
+            await callback.message.edit_text(
+                f"✅ <b>Gender set to {gender_badge}!</b>\n"
+                "━━━━━━━━━━━━━━━━━━━\n"
+                "🎂 <b>Now, please select your age range:</b>\n"
+                "This helps your partner know who they are chatting with.",
+                reply_markup=get_age_keyboard(),
+            )
+        except Exception as e:
+            logger.warning("Failed to edit callback message: %s", e)
+    else:
+        try:
+            await callback.message.edit_text(
+                f"✅ <b>Gender set to {gender_badge}!</b>\n"
+                "━━━━━━━━━━━━━━━━━━━\n"
+                "You are all set to chat anonymously.\n\n"
+                "👉 Tap <b>🔍 Find Stranger</b> below to start searching!\n"
+                "👉 Tap <b>/gender</b> or <b>/age</b> to update your preferences.",
+                reply_markup=get_profile_keyboard(),
+            )
+        except Exception as e:
+            logger.warning("Failed to edit callback message: %s", e)
+
+
+@router.message(Command("age"))
+async def handle_age_command(message: Message) -> None:
+    """Allows user to view or update their age range."""
+    from_user = message.from_user
+    if not from_user:
+        return
+
+    db_user, is_banned = await get_or_register_user(from_user)
+    if is_banned:
+        await message.answer("⛔ Your account is suspended.")
+        return
+
+    current_age = format_age_display(db_user.get("age_range"))
+    await message.answer(
+        f"🎂 <b>Age Range Selection</b>\n"
+        "━━━━━━━━━━━━━━━━━━━\n"
+        f"Current selection: <b>{current_age}</b>\n"
+        "━━━━━━━━━━━━━━━━━━━\n"
+        "Select your age bracket below:",
+        reply_markup=get_age_keyboard(),
+    )
+
+
+@router.callback_query(F.data == "cb_open_age")
+async def handle_open_age_callback(callback: CallbackQuery) -> None:
+    """Opens the age range keyboard from inline buttons."""
+    await callback.answer()
+    if callback.message:
+        await callback.message.answer(
+            "🎂 <b>Please select your age range:</b>",
+            reply_markup=get_age_keyboard(),
+        )
+
+
+@router.callback_query(F.data.startswith("cb_age:"))
+async def handle_age_callback(callback: CallbackQuery) -> None:
+    """Processes age range selection callbacks from inline buttons."""
+    if not callback.from_user or not callback.message:
+        return
+
+    tg_id = callback.from_user.id
+    selected_age = callback.data.split(":")[1]
+
+    if selected_age not in ("below_18", "18-25", "25-35", "40+"):
+        await callback.answer("Invalid selection.", show_alert=True)
+        return
+
+    await database.update_user_age_range(tg_id, selected_age)
+    age_badge = format_age_display(selected_age)
+    await callback.answer(f"Age range set to {age_badge}!")
+
     try:
         await callback.message.edit_text(
-            f"✅ <b>Gender set to {selected_gender.title()} {emoji}!</b>\n"
+            f"✅ <b>Age range set to {age_badge}!</b>\n"
             "━━━━━━━━━━━━━━━━━━━\n"
-            "You are all set to chat anonymously.\n\n"
-            "👉 Tap <b>🔍 Find Stranger</b> below to start searching!\n"
-            "👉 Tap <b>/gender</b> if you ever need to change your preference."
+            "Your anonymous profile is complete.\n\n"
+            "👉 Tap <b>🔍 Find Stranger</b> below to start chatting!",
+            reply_markup=get_profile_keyboard(),
         )
     except Exception as e:
         logger.warning("Failed to edit callback message: %s", e)
@@ -394,12 +536,22 @@ async def execute_find_flow(message: Message, from_user) -> None:
         return
 
     gender = db_user.get("gender", "unknown")
-    if gender not in ("male", "female"):
+    if gender not in ("male", "female", "prefer_not_to_say"):
         await message.answer(
             "⚠️ <b>Gender Selection Required</b>\n"
             "━━━━━━━━━━━━━━━━━━━\n"
-            "Please select your gender first so we can match you with opposite-gender strangers:",
+            "Please select your gender preference before searching:",
             reply_markup=get_gender_keyboard(),
+        )
+        return
+
+    age_range = db_user.get("age_range", "unknown")
+    if age_range not in ("below_18", "18-25", "25-35", "40+"):
+        await message.answer(
+            "🎂 <b>Age Range Required</b>\n"
+            "━━━━━━━━━━━━━━━━━━━\n"
+            "Please select your age bracket before searching:",
+            reply_markup=get_age_keyboard(),
         )
         return
 
@@ -421,24 +573,25 @@ async def execute_find_flow(message: Message, from_user) -> None:
         tg_id=tg_id,
         gender=gender,
         is_premium=is_premium,
+        age_range=age_range,
     )
 
     if matched and partner_id:
-        partner_notice = (
-            "🎉 <b>MATCH FOUND!</b>\n"
-            "━━━━━━━━━━━━━━━━━━━\n"
-            "🟢 <b>Status:</b> Connected with an opposite-gender stranger\n"
-            "🎭 <b>Identity:</b> 100% Anonymous & Private\n"
-            "⚡ <b>Quick Actions:</b> Tap buttons below or send a message!\n"
-            "━━━━━━━━━━━━━━━━━━━\n"
-            "<i>Say hello 👋 or tap 🎲 Send Icebreaker to start!</i>"
+        partner_db = await database.get_user(partner_id) or {}
+        notice_for_me = get_match_found_text(
+            partner_gender=partner_db.get("gender"),
+            partner_age=partner_db.get("age_range"),
         )
-        await message.answer(partner_notice, reply_markup=get_chat_reply_keyboard())
+        notice_for_partner = get_match_found_text(
+            partner_gender=gender,
+            partner_age=age_range,
+        )
+        await message.answer(notice_for_me, reply_markup=get_chat_reply_keyboard())
 
         try:
             await message.bot.send_message(
                 chat_id=partner_id,
-                text=partner_notice,
+                text=notice_for_partner,
                 reply_markup=get_chat_reply_keyboard(),
             )
         except Exception as e:
@@ -453,7 +606,7 @@ async def execute_find_flow(message: Message, from_user) -> None:
         await message.answer(
             f"🔍 <b>Searching for a partner...</b>{vip_tag}\n"
             "━━━━━━━━━━━━━━━━━━━\n"
-            f"Looking for an opposite-gender stranger to connect with.{tip}\n"
+            f"Looking for an opposite-gender stranger (or any waiting stranger).{tip}\n"
             "━━━━━━━━━━━━━━━━━━━\n"
             "Please wait, or tap below to cancel search:",
             reply_markup=get_search_keyboard(),
@@ -510,10 +663,18 @@ async def handle_next_command(message: Message) -> None:
     await match_queue.remove_user(tg_id)
 
     gender = db_user.get("gender", "unknown")
-    if gender not in ("male", "female"):
+    if gender not in ("male", "female", "prefer_not_to_say"):
         await message.answer(
             "⚠️ Please select your gender first using /gender to find a match.",
             reply_markup=get_gender_keyboard(),
+        )
+        return
+
+    age_range = db_user.get("age_range", "unknown")
+    if age_range not in ("below_18", "18-25", "25-35", "40+"):
+        await message.answer(
+            "🎂 Please select your age bracket first using /age to find a match.",
+            reply_markup=get_age_keyboard(),
         )
         return
 
@@ -522,22 +683,24 @@ async def handle_next_command(message: Message) -> None:
         tg_id=tg_id,
         gender=gender,
         is_premium=is_premium,
+        age_range=age_range,
     )
 
     if matched and new_partner_id:
-        partner_notice = (
-            "🎉 <b>MATCH FOUND!</b>\n"
-            "━━━━━━━━━━━━━━━━━━━\n"
-            "🟢 <b>Status:</b> Connected with an opposite-gender stranger\n"
-            "🎭 <b>Identity:</b> 100% Anonymous & Private\n"
-            "━━━━━━━━━━━━━━━━━━━\n"
-            "<i>Say hello 👋 or tap 🎲 Send Icebreaker to start!</i>"
+        partner_db = await database.get_user(new_partner_id) or {}
+        notice_for_me = get_match_found_text(
+            partner_gender=partner_db.get("gender"),
+            partner_age=partner_db.get("age_range"),
         )
-        await message.answer(partner_notice, reply_markup=get_chat_reply_keyboard())
+        notice_for_partner = get_match_found_text(
+            partner_gender=gender,
+            partner_age=age_range,
+        )
+        await message.answer(notice_for_me, reply_markup=get_chat_reply_keyboard())
         try:
             await message.bot.send_message(
                 chat_id=new_partner_id,
-                text=partner_notice,
+                text=notice_for_partner,
                 reply_markup=get_chat_reply_keyboard(),
             )
         except Exception as e:
@@ -547,7 +710,7 @@ async def handle_next_command(message: Message) -> None:
         await message.answer(
             f"🔍 <b>Searching for a new stranger...</b>{vip_tag}\n"
             "━━━━━━━━━━━━━━━━━━━\n"
-            "Looking for an opposite-gender match. Please wait a moment...",
+            "Looking for a match. Please wait a moment...",
             reply_markup=get_search_keyboard(),
         )
 
