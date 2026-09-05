@@ -1,7 +1,9 @@
 import asyncio
 import logging
 import sys
+import time
 from typing import Optional
+import aiohttp
 from aiohttp import web
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
@@ -15,6 +17,9 @@ import database
 import handlers
 from inactivity import run_inactivity_checker
 
+# Server start timestamp for uptime reporting
+SERVER_START_TIME = time.time()
+
 # Configure root logger
 logging.basicConfig(
     level=logging.INFO,
@@ -25,8 +30,9 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Global background task reference for inactivity cleanup
+# Global background task references
 inactivity_task: Optional[asyncio.Task] = None
+keep_alive_task: Optional[asyncio.Task] = None
 
 VERIFIED_FALLBACK_TOKEN = "8640606254:AAG-Zxv7IMFgMAJ89blGB-d8ByQPJkzqQcI"
 
@@ -242,6 +248,62 @@ async def health_check_and_landing(request: web.Request) -> web.Response:
     return web.Response(text=SEO_LANDING_HTML, content_type="text/html")
 
 
+async def healthz_handler(request: web.Request) -> web.Response:
+    """
+    Lightweight health check endpoint for Render, UptimeRobot, and uptime monitors.
+    Returns HTTP 200 with uptime and service metadata in JSON format.
+    """
+    uptime_seconds = int(time.time() - SERVER_START_TIME)
+    return web.json_response(
+        {
+            "status": "ok",
+            "uptime_seconds": uptime_seconds,
+            "service": "stranger-chat-bot",
+        },
+        status=200,
+    )
+
+
+async def ping_handler(request: web.Request) -> web.Response:
+    """Ultra-fast ping route returning HTTP 200 'pong' for uptime checkers."""
+    return web.Response(text="pong", content_type="text/plain", status=200)
+
+
+async def run_keep_alive_worker(base_url: str, interval_minutes: int = 12) -> None:
+    """
+    Proactively pings the bot's own public Render URL every 12 minutes (e.g. GET /healthz).
+    Because requests traverse Render's external load balancer, this resets the 15-minute inactivity
+    timer from within the container itself, keeping it awake even without user interactions.
+    """
+    clean_url = base_url.rstrip("/")
+    if clean_url.endswith("/webhook"):
+        clean_url = clean_url[:-8]
+
+    target_url = f"{clean_url}/healthz"
+    interval_seconds = interval_minutes * 60
+
+    logger.info("Internal keep-alive worker started. Target: %s every %d minutes.", target_url, interval_minutes)
+
+    # Initial delay (wait 60s for server to start, bind port, and establish webhook)
+    await asyncio.sleep(60)
+
+    while True:
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(target_url, timeout=aiohttp.ClientTimeout(total=15)) as resp:
+                    if resp.status == 200:
+                        logger.info("Keep-alive self-ping to %s succeeded (HTTP 200).", target_url)
+                    else:
+                        logger.warning("Keep-alive self-ping to %s returned HTTP %s.", target_url, resp.status)
+        except asyncio.CancelledError:
+            logger.info("Keep-alive worker stopped.")
+            break
+        except Exception as e:
+            logger.warning("Keep-alive self-ping encountered non-fatal error: %s", e)
+
+        await asyncio.sleep(interval_seconds)
+
+
 async def setup_bot_seo_metadata(bot: Bot) -> None:
     """Configures Telegram Bot SEO descriptions and commands for high search discovery."""
     commands = [
@@ -301,7 +363,7 @@ async def on_startup(bot: Bot) -> None:
     2. Launches the 10-minute inactivity cleaner background task.
     3. Configures Telegram SEO, command menus, and webhooks.
     """
-    global inactivity_task
+    global inactivity_task, keep_alive_task
     logger.info("Initializing database...")
     await database.init_db()
 
@@ -309,6 +371,12 @@ async def on_startup(bot: Bot) -> None:
     inactivity_task = asyncio.create_task(
         run_inactivity_checker(bot, check_interval_seconds=30, timeout_minutes=10)
     )
+
+    # Start internal keep-alive self-pinging task (prevents Render 15-min idle sleep)
+    if config.WEBHOOK_URL and config.WEBHOOK_URL.startswith("http"):
+        keep_alive_task = asyncio.create_task(
+            run_keep_alive_worker(config.WEBHOOK_URL, interval_minutes=12)
+        )
 
     try:
         bot_info = await bot.get_me()
@@ -356,7 +424,7 @@ async def on_startup(bot: Bot) -> None:
 
 async def on_shutdown(bot: Bot) -> None:
     """Handles graceful shutdown: cancels background tasks and closes bot session."""
-    global inactivity_task
+    global inactivity_task, keep_alive_task
     logger.info("Shutting down bot...")
     if inactivity_task and not inactivity_task.done():
         inactivity_task.cancel()
@@ -364,6 +432,13 @@ async def on_shutdown(bot: Bot) -> None:
             await inactivity_task
         except asyncio.CancelledError:
             logger.info("Inactivity cleaner stopped cleanly.")
+
+    if keep_alive_task and not keep_alive_task.done():
+        keep_alive_task.cancel()
+        try:
+            await keep_alive_task
+        except asyncio.CancelledError:
+            logger.info("Keep-alive worker stopped cleanly.")
 
     try:
         await bot.session.close()
@@ -413,6 +488,10 @@ def main() -> None:
 
     # Serve SEO landing page on root GET /
     app.router.add_get("/", health_check_and_landing)
+
+    # Dedicated health check & ping routes for Render, UptimeRobot, and uptime monitors
+    app.router.add_get("/healthz", healthz_handler)
+    app.router.add_get("/ping", ping_handler)
 
     # Telegram webhook POST route (handle_in_background=False ensures synchronous processing before HTTP response)
     SimpleRequestHandler(

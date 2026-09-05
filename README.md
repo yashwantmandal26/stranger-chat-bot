@@ -284,6 +284,25 @@ Render Web Services provide automatic HTTPS, custom domains, and zero-downtime d
 6. Click **Create Web Service**.
 7. Render automatically provisions the container, validates `GET /`, and registers the webhook with Telegram.
 
+### 6. Keeping the Instance Warm (Preventing 15-Min Free-Tier Sleep)
+
+Render's Free Web Services spin down into sleep mode after 15 minutes of inactivity, causing incoming Telegram messages to endure a 30–60 second cold-start wake-up delay.
+
+To ensure **instant 24/7 message delivery**, the application provides dual-layer keep-alive mechanisms:
+
+1. **Automatic Internal Keep-Alive Worker**:
+   - The bot automatically spawns an asynchronous background worker (`run_keep_alive_worker`) that pings its own public URL (`GET /healthz`) every 12 minutes.
+   - Because this request traverses Render's external HTTPS load balancer, Render resets its 15-minute inactivity timer from within the container.
+
+2. **External Uptime Monitor (Recommended Redundancy)**:
+   - Configure a free monitor using [UptimeRobot](https://uptimerobot.com/) or [cron-job.org](https://cron-job.org/):
+     - **Monitor Type**: `HTTP(s)`
+     - **Friendly Name**: `Stranger Chat Bot`
+     - **URL**: `https://<your-service-name>.onrender.com/healthz`
+     - **Monitoring Interval**: `Every 10 minutes` (or `Every 12 minutes`)
+     - **Expected HTTP Code**: `200 OK`
+   - Both `/healthz` (JSON with uptime stats) and `/ping` (raw `pong`) return in `<1ms`, keeping memory and CPU footprint near zero.
+
 ---
 
 ## 🤖 Command & Button Reference
