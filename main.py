@@ -6,6 +6,7 @@ from aiohttp import web
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
+from aiogram.exceptions import TelegramAPIError, TelegramUnauthorizedError
 from aiogram.types import BotCommand, ErrorEvent
 from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
 
@@ -58,50 +59,59 @@ async def on_startup(bot: Bot) -> None:
     """
     Executes startup actions:
     1. Initializes SQLite database.
-    2. Registers Telegram command menu.
-    3. Configures webhook with Telegram if WEBHOOK_URL is set.
-    4. Launches the 10-minute inactivity cleaner background task.
+    2. Launches the 10-minute inactivity cleaner background task.
+    3. Verifies Telegram credentials, registers commands, and sets webhook.
     """
     global inactivity_task
     logger.info("Initializing database...")
     await database.init_db()
-
-    # Set up command menu in Telegram
-    await set_bot_commands(bot)
-
-    # Register webhook with Telegram if WEBHOOK_URL is configured
-    webhook_url = config.WEBHOOK_URL
-    if webhook_url:
-        target_webhook = (
-            webhook_url
-            if webhook_url.endswith("/webhook")
-            else f"{webhook_url.rstrip('/')}/webhook"
-        )
-        logger.info("Registering webhook with Telegram: %s", target_webhook)
-        await bot.set_webhook(
-            url=target_webhook,
-            drop_pending_updates=True,
-            allowed_updates=handlers.router.resolve_used_update_types(),
-        )
-        webhook_info = await bot.get_webhook_info()
-        logger.info("Telegram Webhook registered successfully! Active URL: %s", webhook_info.url)
-    else:
-        logger.warning(
-            "WEBHOOK_URL is not set in environment. Webhook was not registered with Telegram. "
-            "On Render, set WEBHOOK_URL to your service URL (e.g., https://your-app.onrender.com)."
-        )
 
     # Start the 10-minute inactivity session cleaner background task
     inactivity_task = asyncio.create_task(
         run_inactivity_checker(bot, check_interval_seconds=30, timeout_minutes=10)
     )
 
-    bot_info = await bot.get_me()
-    logger.info(
-        "Stranger Chat Bot started successfully! Username: @%s (ID: %s)",
-        bot_info.username,
-        bot_info.id,
-    )
+    # Connect to Telegram and configure webhooks
+    try:
+        bot_info = await bot.get_me()
+        logger.info(
+            "Stranger Chat Bot connected to Telegram! Username: @%s (ID: %s)",
+            bot_info.username,
+            bot_info.id,
+        )
+
+        # Set up command menu in Telegram
+        await set_bot_commands(bot)
+
+        # Register webhook with Telegram if WEBHOOK_URL is configured
+        webhook_url = config.WEBHOOK_URL
+        if webhook_url:
+            target_webhook = (
+                webhook_url
+                if webhook_url.endswith("/webhook")
+                else f"{webhook_url.rstrip('/')}/webhook"
+            )
+            logger.info("Registering webhook with Telegram: %s", target_webhook)
+            await bot.set_webhook(
+                url=target_webhook,
+                drop_pending_updates=True,
+                allowed_updates=handlers.router.resolve_used_update_types(),
+            )
+            webhook_info = await bot.get_webhook_info()
+            logger.info("Telegram Webhook active! URL: %s", webhook_info.url)
+        else:
+            logger.warning("WEBHOOK_URL is not set. Webhook was not registered with Telegram.")
+
+    except TelegramUnauthorizedError as e:
+        logger.critical(
+            "CRITICAL: Telegram unauthorized error: %s. "
+            "Please check that BOT_TOKEN in Render environment variables matches your bot token from @BotFather!",
+            e,
+        )
+    except TelegramAPIError as e:
+        logger.error("Telegram API error during startup: %s", e)
+    except Exception as e:
+        logger.error("Unexpected error during Telegram initialization: %s", e)
 
 
 async def on_shutdown(bot: Bot) -> None:
@@ -126,7 +136,7 @@ def main() -> None:
     """Application entry point: sets up aiohttp web server with aiogram webhooks."""
     if not config.BOT_TOKEN:
         logger.error(
-            "ERROR: BOT_TOKEN is not configured! Please provide your Telegram Bot Token in the .env file."
+            "ERROR: BOT_TOKEN is not configured! Please provide your Telegram Bot Token in the .env file or environment variables."
         )
         sys.exit(1)
 
